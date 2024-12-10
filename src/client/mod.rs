@@ -11,6 +11,7 @@ use crate::{
     },
     tools::{CallToolRequest, ListToolsRequest, ListToolsResponse, ToolCapabilities, ToolResult},
     transport::{Transport, TransportCommand},
+    transport::stdio::StdioTransport,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -403,7 +404,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::StdioTransport;
+    use crate::transport::stdio::StdioTransport;
 
     #[tokio::test]
     async fn test_client_lifecycle() -> Result<(), McpError> {

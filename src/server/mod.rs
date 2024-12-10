@@ -19,7 +19,10 @@ use crate::{
     protocol::{JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions},
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
-    transport::{SseTransport, StdioTransport},
+    transport::{
+        sse::SseTransport,
+        stdio::StdioTransport,
+    },
     NotificationSender,
 };
 use crate::{
