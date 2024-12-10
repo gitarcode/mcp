@@ -8,6 +8,7 @@ use mcp_rs::{
         config::{ResourceSettings, ServerConfig, ServerSettings, TransportType},
         McpServer,
     },
+    protocol::BasicRequestHandler,
     tools::calculator::CalculatorTool,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -88,7 +89,8 @@ async fn main() -> Result<(), McpError> {
     let logging_level = config.logging.level.clone();
 
     // Create server instance
-    let mut server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("MCP Server".to_string(), env!("CARGO_PKG_VERSION").to_string());
+    let mut server = McpServer::new(config, handler);
 
     // Set up logging with both standard and MCP subscribers
     let mcp_subscriber = McpSubscriber::new(Arc::clone(&server.logging_manager));

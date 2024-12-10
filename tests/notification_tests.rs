@@ -1,11 +1,11 @@
 use mcp_rs::{
-    error::McpError, prompts::{Prompt, PromptCapabilities}, protocol::JsonRpcNotification, resource::{FileSystemProvider, ResourceCapabilities}, server::{config::{LoggingSettings, ResourceSettings, SecuritySettings, ServerConfig, ServerSettings, ToolSettings, TransportType}, McpServer}, NotificationSender
+    error::McpError, prompts::{Prompt, PromptCapabilities}, protocol::{JsonRpcNotification, BasicRequestHandler}, resource::{FileSystemProvider, ResourceCapabilities}, server::{config::{LoggingSettings, ResourceSettings, SecuritySettings, ServerConfig, ServerSettings, ToolSettings, TransportType}, McpServer}, NotificationSender
 };
 use tokio::sync::mpsc;
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 
-async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<McpServer>, TempDir) {
+async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<McpServer<BasicRequestHandler>>, TempDir) {
     let temp_dir = TempDir::new().unwrap();
     
     let config = ServerConfig {
@@ -35,7 +35,8 @@ async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<
         }],
     };
 
-    let mut server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let mut server = McpServer::new(config, handler);
     
     // Set up notification sender for all managers
     let notification_sender = NotificationSender {
