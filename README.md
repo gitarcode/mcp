@@ -176,7 +176,6 @@ cargo test
 # Run with logging
 RUST_LOG=debug cargo test
 ```
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
@@ -189,3 +188,341 @@ This implementation is based on the Model Context Protocol specification and ins
 
 - Issue Tracker: [GitHub Issues](https://github.com/EmilLindfors/mcp/issues)
 - Source Code: [GitHub Repository](https://github.com/EmilLindfors/mcp)
+
+## Using as a Library
+
+### Core Server Components
+
+#### McpServer
+
+The main server struct that handles MCP protocol communication.
+
+```rust
+pub struct McpServer {
+    pub config: ServerConfig,
+    pub resource_manager: Arc<ResourceManager>,
+    pub tool_manager: Arc<ToolManager>,
+    pub prompt_manager: Arc<PromptManager>,
+    pub logging_manager: Arc<tokio::sync::Mutex<LoggingManager>>,
+    // ... internal fields
+}
+
+impl McpServer {
+    // Create a new server instance
+    pub async fn new(config: ServerConfig) -> Self;
+    
+    // Start server with stdio transport
+    pub async fn run_stdio_transport(&mut self) -> Result<(), McpError>;
+    
+    // Start server with SSE transport
+    pub async fn run_sse_transport(&mut self) -> Result<(), McpError>;
+}
+```
+
+#### ServerConfig
+
+Configuration struct for the MCP server.
+
+```rust
+pub struct ServerConfig {
+    pub server: ServerSettings,
+    pub resources: ResourceSettings,
+    pub security: SecuritySettings,
+    pub logging: LoggingSettings,
+    pub tool_settings: ToolSettings,
+    pub tools: Vec<ToolType>,
+    pub prompts: Vec<Prompt>,
+}
+
+// Server-specific settings
+pub struct ServerSettings {
+    pub name: String,
+    pub version: String,
+    pub transport: TransportType,
+    pub host: String,
+    pub port: u16,
+    pub max_connections: usize,
+    pub timeout_ms: u64,
+}
+
+// Resource settings
+pub struct ResourceSettings {
+    pub root_path: PathBuf,
+    pub allowed_schemes: Vec<String>,
+    pub max_file_size: usize,
+    pub enable_templates: bool,
+}
+
+// Security configuration
+pub struct SecuritySettings {
+    pub enable_auth: bool,
+    pub token_secret: Option<String>,
+    pub rate_limit: RateLimitSettings,
+    pub allowed_origins: Vec<String>,
+}
+
+pub struct RateLimitSettings {
+    pub requests_per_minute: u32,
+    pub burst_size: u32,
+}
+
+// Logging configuration
+pub struct LoggingSettings {
+    pub level: String,
+    pub file: Option<PathBuf>,
+    pub format: LogFormat,
+}
+
+// Tool settings
+pub struct ToolSettings {
+    pub enabled: bool,
+    pub require_confirmation: bool,
+    pub allowed_tools: Vec<String>,
+    pub max_execution_time_ms: u64,
+    pub rate_limit: RateLimitSettings,
+}
+
+// Transport type enum
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransportType {
+    Stdio,
+    Sse,
+    WebSocket,
+}
+
+// Log format enum
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    Json,
+    Pretty,
+    Compact,
+}
+```
+
+### Tool Implementation
+
+To implement a custom tool:
+
+```rust
+use async_trait::async_trait;
+use serde_json::Value;
+
+#[async_trait]
+pub trait ToolProvider: Send + Sync {
+    // Return tool definition
+    async fn get_tool(&self) -> Tool;
+    
+    // Execute tool with given arguments
+    async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError>;
+}
+
+// Tool definition struct
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: ToolInputSchema,
+}
+
+// Tool execution result
+pub struct ToolResult {
+    pub content: Vec<ToolContent>,
+    pub is_error: bool,
+}
+```
+
+### Resource Implementation
+
+Resources provide access to files and other data sources:
+
+```rust
+pub struct ResourceManager {
+    pub capabilities: ResourceCapabilities,
+    // ... internal fields
+}
+
+impl ResourceManager {
+    // Register a new resource provider
+    pub async fn register_provider(
+        &self,
+        scheme: String,
+        provider: Arc<dyn ResourceProvider>
+    );
+    
+    // List available resources
+    pub async fn list_resources(
+        &self,
+        cursor: Option<String>
+    ) -> Result<ListResourcesResponse, McpError>;
+    
+    // Read resource content
+    pub async fn read_resource(
+        &self,
+        uri: &str
+    ) -> Result<ReadResourceResponse, McpError>;
+}
+```
+
+### Prompt Implementation
+
+Prompts allow defining reusable text templates:
+
+```rust
+pub struct PromptManager {
+    pub capabilities: PromptCapabilities,
+    // ... internal fields
+}
+
+impl PromptManager {
+    // Register a new prompt
+    pub async fn register_prompt(&self, prompt: Prompt);
+    
+    // List available prompts
+    pub async fn list_prompts(
+        &self,
+        cursor: Option<String>
+    ) -> Result<ListPromptsResponse, McpError>;
+    
+    // Get prompt with arguments
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<Value>
+    ) -> Result<PromptResult, McpError>;
+}
+```
+
+### Example Usage
+
+Basic example of creating and running an MCP server:
+
+```rust
+use mcp_rs::{
+    server::{McpServer, ServerConfig},
+    tools::ToolType,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create default config
+    let mut config = ServerConfig::default();
+    
+    // Customize config
+    config.server.name = "my-mcp-server".to_string();
+    config.server.version = "1.0.0".to_string();
+    
+    // Add tools
+    config.tools.push(ToolType::Calculator);
+    
+    // Create and run server
+    let mut server = McpServer::new(config).await;
+    server.run_stdio_transport().await?;
+    
+    Ok(())
+}
+```
+
+For more detailed examples, see the `examples/` directory and the test files.
+
+### Custom Transport Implementation
+
+The MCP server can work with any transport layer that implements the `Transport` trait:
+
+```rust
+#[async_trait]
+pub trait Transport: Send + Sync {
+    // Receive incoming messages
+    async fn receive(&mut self) -> Result<JsonRpcMessage, McpError>;
+    
+    // Send outgoing messages
+    async fn send(&mut self, message: JsonRpcMessage) -> Result<(), McpError>;
+    
+    // Handle transport-specific commands
+    async fn handle_command(&mut self, command: TransportCommand) -> Result<(), McpError>;
+    
+    // Close the transport
+    async fn close(&mut self) -> Result<(), McpError>;
+}
+
+// Message types that transports must handle
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRpcMessage {
+    pub jsonrpc: String,
+    pub id: Option<Value>,
+    pub method: Option<String>,
+    pub params: Option<Value>,
+    pub result: Option<Value>,
+    pub error: Option<JsonRpcError>,
+}
+
+// Commands that transports must handle
+#[derive(Debug)]
+pub enum TransportCommand {
+    Close,
+    // Add custom commands as needed
+}
+```
+
+Example of connecting a custom transport:
+
+```rust
+use mcp_rs::{
+    server::{McpServer, ServerConfig},
+    transport::{Transport, JsonRpcMessage, TransportCommand},
+    error::McpError,
+};
+
+struct MyCustomTransport {
+    // Your transport-specific fields
+}
+
+#[async_trait]
+impl Transport for MyCustomTransport {
+    async fn receive(&mut self) -> Result<JsonRpcMessage, McpError> {
+        // Implement message receiving logic
+    }
+    
+    async fn send(&mut self, message: JsonRpcMessage) -> Result<(), McpError> {
+        // Implement message sending logic
+    }
+    
+    async fn handle_command(&mut self, command: TransportCommand) -> Result<(), McpError> {
+        match command {
+            TransportCommand::Close => {
+                // Handle close command
+                Ok(())
+            }
+        }
+    }
+    
+    async fn close(&mut self) -> Result<(), McpError> {
+        // Implement cleanup logic
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config = ServerConfig::default();
+    let mut server = McpServer::new(config).await;
+    
+    // Create and connect custom transport
+    let transport = MyCustomTransport { /* ... */ };
+    let protocol = server.register_protocol_handlers(
+        Protocol::builder(Some(ProtocolOptions {
+            enforce_strict_capabilities: true,
+        }))
+    ).build();
+    
+    let protocol_handle = protocol.connect(transport).await?;
+    
+    // Handle shutdown gracefully
+    tokio::signal::ctrl_c().await?;
+    protocol_handle.close().await?;
+    
+    Ok(())
+}
+```
+
+The custom transport can use any underlying communication mechanism (sockets, pipes, shared memory, etc.) as long as it properly serializes and deserializes the MCP protocol messages.
