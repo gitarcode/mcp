@@ -20,7 +20,7 @@ use warp::Filter;
 
 use crate::{
     error::McpError,
-    protocol::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse},
+    protocol::types::*,  // Import all JSON-RPC types from protocol
 };
 
 // Message types for the transport actor
@@ -35,15 +35,6 @@ pub enum TransportEvent {
     Message(JsonRpcMessage),
     Error(McpError),
     Closed,
-}
-
-// JSON-RPC Message types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum JsonRpcMessage {
-    Request(JsonRpcRequest),
-    Response(JsonRpcResponse),
-    Notification(JsonRpcNotification),
 }
 
 // Transport trait

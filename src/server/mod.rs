@@ -15,19 +15,17 @@ use crate::tools::{ToolCapabilities, ToolManager};
 use crate::{
     client::ServerCapabilities,
     error::McpError,
-    logging::LoggingCapabilities,
-    protocol::{JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions},
+    logging::{LoggingManager, SetLevelRequest, LoggingCapabilities},
+    protocol::{JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions, RequestHandler, BasicRequestHandler},
+    protocol::types::*,
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
     transport::{
         sse::SseTransport,
         stdio::StdioTransport,
+        Transport, TransportChannels, TransportCommand, TransportEvent,
     },
     NotificationSender,
-};
-use crate::{
-    logging::{LoggingManager, SetLevelRequest},
-    transport::{JsonRpcMessage, TransportCommand},
 };
 use tokio::sync::mpsc;
 
@@ -683,5 +681,68 @@ impl McpServer {
         );
 
         builder
+    }
+}
+
+pub struct Server<H: RequestHandler> {
+    transport: Box<dyn Transport>,
+    handler: Arc<H>,
+}
+
+impl<H: RequestHandler> Server<H> {
+    pub fn new(transport: Box<dyn Transport>, handler: H) -> Self {
+        Self {
+            transport,
+            handler: Arc::new(handler),
+        }
+    }
+
+    pub async fn run(&mut self) -> Result<(), McpError> {
+        let TransportChannels { cmd_tx, event_rx } = self.transport.start().await?;
+        let mut event_rx = event_rx.lock().await;
+
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                TransportEvent::Message(msg) => {
+                    let response = match msg {
+                        JsonRpcMessage::Request(req) => {
+                            match self.handler.handle_request(&req.method, req.params).await {
+                                Ok(result) => JsonRpcMessage::Response(JsonRpcResponse {
+                                    jsonrpc: "2.0".to_string(),
+                                    id: req.id,
+                                    result: Some(result),
+                                    error: None,
+                                }),
+                                Err(e) => JsonRpcMessage::Response(JsonRpcResponse {
+                                    jsonrpc: "2.0".to_string(),
+                                    id: req.id,
+                                    result: None,
+                                    error: Some(e.into()),
+                                }),
+                            }
+                        },
+                        JsonRpcMessage::Notification(n) => {
+                            if let Err(e) = self.handler.handle_notification(&n.method, n.params).await {
+                                tracing::error!("Error handling notification: {:?}", e);
+                            }
+                            continue;
+                        },
+                        _ => continue,
+                    };
+
+                    if let Err(e) = cmd_tx.send(TransportCommand::SendMessage(response)).await {
+                        tracing::error!("Failed to send response: {:?}", e);
+                        break;
+                    }
+                },
+                TransportEvent::Error(e) => {
+                    tracing::error!("Transport error: {:?}", e);
+                    break;
+                },
+                TransportEvent::Closed => break,
+            }
+        }
+
+        Ok(())
     }
 }
