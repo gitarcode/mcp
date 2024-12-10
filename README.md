@@ -526,3 +526,509 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The custom transport can use any underlying communication mechanism (sockets, pipes, shared memory, etc.) as long as it properly serializes and deserializes the MCP protocol messages.
+
+## Transport Protocols
+
+### Unix Domain Sockets Transport
+
+The Unix transport uses Unix domain sockets for communication between client and server. Messages are exchanged using a line-based protocol where each JSON-RPC message is sent as a complete line terminated by a newline character (`\n`).
+
+#### Protocol Details
+
+- **Socket Location**: By default, the socket file is created at the specified path
+- **Message Format**: Line-delimited JSON-RPC messages
+- **Message Framing**: Each message must be a complete JSON object on a single line, terminated by `\n`
+- **Encoding**: UTF-8
+
+#### Server Mode
+
+```rust
+use mcp::transport::UnixTransport;
+
+// Create server transport
+let transport = UnixTransport::new_server(
+    PathBuf::from("/tmp/mcp.sock"), // Socket path
+    Some(4092)                      // Optional buffer size
+);
+```
+
+The server:
+1. Creates the Unix domain socket at the specified path
+2. Accepts a single client connection
+3. Removes the socket file when shutting down
+
+#### Client Mode
+
+```rust
+use mcp::transport::UnixTransport;
+
+// Create client transport
+let transport = UnixTransport::new_client(
+    PathBuf::from("/tmp/mcp.sock"), // Socket path
+    Some(4092)                      // Optional buffer size
+);
+```
+
+The client:
+1. Connects to the existing Unix domain socket
+2. Maintains a single persistent connection
+3. Automatically handles reconnection on connection loss
+
+#### Message Exchange
+
+Messages are sent as complete JSON-RPC objects, one per line:
+
+```json
+{"jsonrpc": "2.0", "method": "list_resources", "params": {}, "id": 1}\n
+{"jsonrpc": "2.0", "result": {"resources": []}, "id": 1}\n
+```
+
+#### Command Line Usage
+
+Start server with Unix transport:
+```bash
+cargo run --bin server -- -t unix -s /tmp/mcp.sock
+```
+
+Connect client using Unix transport:
+```bash
+cargo run --bin client -- -t unix -s /tmp/mcp.sock list-resources
+```
+
+#### Error Handling
+
+- Connection failures return `McpError::IoError`
+- Invalid JSON messages return `McpError::ParseError`
+- Socket permission errors return `McpError::IoError`
+
+#### Security Considerations
+
+- Socket files have standard Unix file permissions
+- Only one client can connect at a time
+- Socket file is automatically removed on server shutdown
+- Path traversal protection is enforced
+- Socket files should be created in appropriate directories with correct permissions
+
+## Implementing Custom Request Handlers
+
+The MCP server allows customizing how different requests are handled through the `RequestHandler` trait. Here's how to implement custom handling:
+
+### Basic Request Handler
+
+```rust
+use mcp::{
+    protocol::{RequestHandler, JsonRpcRequest, JsonRpcResponse},
+    error::McpError,
+};
+
+struct MyRequestHandler {
+    // Your handler's state
+    resource_path: PathBuf,
+}
+
+#[async_trait]
+impl RequestHandler for MyRequestHandler {
+    async fn handle_request(&self, request: JsonRpcRequest) -> Result<JsonRpcResponse, McpError> {
+        match request.method.as_str() {
+            // Handle resource listing
+            "list_resources" => {
+                let resources = self.list_my_resources().await?;
+                Ok(JsonRpcResponse::success(request.id, resources))
+            },
+            
+            // Handle resource reading
+            "read_resource" => {
+                let uri = request.params.get("uri")
+                    .ok_or(McpError::InvalidParams)?;
+                let content = self.read_my_resource(uri).await?;
+                Ok(JsonRpcResponse::success(request.id, content))
+            },
+            
+            // Unknown method
+            _ => Ok(JsonRpcResponse::error(
+                request.id,
+                McpError::MethodNotFound.into()
+            ))
+        }
+    }
+}
+
+impl MyRequestHandler {
+    async fn list_my_resources(&self) -> Result<Vec<Resource>, McpError> {
+        // Your resource listing implementation
+    }
+
+    async fn read_my_resource(&self, uri: &str) -> Result<ResourceContent, McpError> {
+        // Your resource reading implementation
+    }
+}
+```
+
+### Registering the Handler
+
+```rust
+use mcp::{McpServer, ServerConfig};
+
+#[tokio::main]
+async fn main() -> Result<(), McpError> {
+    let config = ServerConfig::default();
+    let mut server = McpServer::new(config).await;
+    
+    // Create and register your handler
+    let handler = MyRequestHandler {
+        resource_path: PathBuf::from("/path/to/resources"),
+    };
+    server.set_request_handler(handler);
+    
+    // Run the server
+    server.run().await
+}
+```
+
+### Handling Specific Methods
+
+You can implement handlers for the standard MCP methods:
+
+```rust
+impl MyRequestHandler {
+    // List available resources
+    async fn handle_list_resources(&self, params: Value) -> Result<Value, McpError> {
+        let resources = vec![
+            Resource {
+                uri: "file:///example.txt".into(),
+                metadata: ResourceMetadata {
+                    name: "Example File".into(),
+                    size: 1024,
+                    ..Default::default()
+                }
+            }
+        ];
+        Ok(serde_json::to_value(resources)?)
+    }
+
+    // Read resource content
+    async fn handle_read_resource(&self, params: Value) -> Result<Value, McpError> {
+        let uri = params.get("uri")
+            .and_then(Value::as_str)
+            .ok_or(McpError::InvalidParams)?;
+            
+        let content = tokio::fs::read_to_string(uri).await
+            .map_err(|_| McpError::ResourceNotFound)?;
+            
+        Ok(serde_json::json!({
+            "content": content,
+            "metadata": {
+                "type": "text/plain"
+            }
+        }))
+    }
+
+    // Handle tool execution
+    async fn handle_execute_tool(&self, params: Value) -> Result<Value, McpError> {
+        let tool_name = params.get("name")
+            .and_then(Value::as_str)
+            .ok_or(McpError::InvalidParams)?;
+            
+        match tool_name {
+            "my_tool" => {
+                // Tool implementation
+                Ok(serde_json::json!({ "result": "success" }))
+            }
+            _ => Err(McpError::ToolNotFound)
+        }
+    }
+}
+```
+
+### Error Handling
+
+The handler can return standard MCP errors or custom errors:
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum MyHandlerError {
+    #[error("Resource quota exceeded")]
+    QuotaExceeded,
+    
+    #[error("Invalid resource format: {0}")]
+    InvalidFormat(String),
+}
+
+impl From<MyHandlerError> for McpError {
+    fn from(err: MyHandlerError) -> Self {
+        match err {
+            MyHandlerError::QuotaExceeded => 
+                McpError::Custom { 
+                    code: -32000, 
+                    message: err.to_string() 
+                },
+            MyHandlerError::InvalidFormat(msg) => 
+                McpError::Custom { 
+                    code: -32001, 
+                    message: format!("Format error: {}", msg)
+                },
+        }
+    }
+}
+```
+
+### Middleware Support
+
+You can also add middleware for cross-cutting concerns:
+
+```rust
+struct LoggingMiddleware<H>(H);
+
+#[async_trait]
+impl<H: RequestHandler> RequestHandler for LoggingMiddleware<H> {
+    async fn handle_request(&self, request: JsonRpcRequest) -> Result<JsonRpcResponse, McpError> {
+        tracing::info!("Handling request: {:?}", request);
+        let result = self.0.handle_request(request).await;
+        tracing::info!("Request result: {:?}", result);
+        result
+    }
+}
+
+// Usage
+let handler = LoggingMiddleware(MyRequestHandler { ... });
+server.set_request_handler(handler);
+```
+
+This allows you to customize every aspect of how the MCP server handles requests while maintaining protocol compatibility.
+
+### Core MCP Protocol Handlers
+
+A complete MCP server implementation should handle these core capabilities:
+
+```rust
+use mcp::{
+    protocol::{RequestHandler, JsonRpcRequest, JsonRpcResponse},
+    resource::{Resource, ResourceContent, ResourceMetadata},
+    tools::{Tool, ToolResult},
+    prompts::{Prompt, PromptResult},
+    error::McpError,
+};
+
+struct MyMcpHandler {
+    // Handler state
+    resources: Arc<ResourceManager>,
+    tools: Arc<ToolManager>,
+    prompts: Arc<PromptManager>,
+}
+
+#[async_trait]
+impl RequestHandler for MyMcpHandler {
+    async fn handle_request(&self, request: JsonRpcRequest) -> Result<JsonRpcResponse, McpError> {
+        match request.method.as_str() {
+            // Resource Methods
+            "list_resources" => {
+                let resources = self.list_resources(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, resources))
+            }
+            "read_resource" => {
+                let content = self.read_resource(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, content))
+            }
+            "watch_resources" => {
+                let subscription = self.watch_resources(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, subscription))
+            }
+
+            // Tool Methods
+            "list_tools" => {
+                let tools = self.list_tools(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, tools))
+            }
+            "execute_tool" => {
+                let result = self.execute_tool(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, result))
+            }
+
+            // Prompt Methods
+            "list_prompts" => {
+                let prompts = self.list_prompts(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, prompts))
+            }
+            "get_prompt" => {
+                let prompt = self.get_prompt(request.params).await?;
+                Ok(JsonRpcResponse::success(request.id, prompt))
+            }
+
+            // Server Info/Capabilities
+            "server_info" => {
+                let info = self.get_server_info().await?;
+                Ok(JsonRpcResponse::success(request.id, info))
+            }
+            "get_capabilities" => {
+                let caps = self.get_capabilities().await?;
+                Ok(JsonRpcResponse::success(request.id, caps))
+            }
+
+            _ => Ok(JsonRpcResponse::error(
+                request.id,
+                McpError::MethodNotFound.into()
+            ))
+        }
+    }
+
+    // Optional: Handle notifications
+    async fn handle_notification(&self, notification: JsonRpcNotification) -> Result<(), McpError> {
+        match notification.method.as_str() {
+            "resource_changed" => {
+                self.handle_resource_change(notification.params).await?;
+                Ok(())
+            }
+            _ => Ok(())
+        }
+    }
+}
+
+// Resource Management
+impl MyMcpHandler {
+    async fn list_resources(&self, params: Option<Value>) -> Result<Vec<Resource>, McpError> {
+        // List available resources with optional filtering
+        let filter = params.and_then(|p| p.get("filter"))
+            .and_then(Value::as_str);
+            
+        let resources = match filter {
+            Some("code") => self.resources.list_code_files().await?,
+            Some("data") => self.resources.list_data_files().await?,
+            _ => self.resources.list_all().await?,
+        };
+        
+        Ok(resources)
+    }
+
+    async fn read_resource(&self, params: Option<Value>) -> Result<ResourceContent, McpError> {
+        let uri = params
+            .and_then(|p| p.get("uri"))
+            .and_then(Value::as_str)
+            .ok_or(McpError::InvalidParams)?;
+
+        self.resources.read(uri).await
+    }
+
+    async fn watch_resources(&self, params: Option<Value>) -> Result<String, McpError> {
+        // Set up resource watching and return subscription ID
+        let patterns = params
+            .and_then(|p| p.get("patterns"))
+            .and_then(Value::as_array)
+            .ok_or(McpError::InvalidParams)?;
+
+        self.resources.create_watch(patterns).await
+    }
+}
+
+// Tool Management 
+impl MyMcpHandler {
+    async fn list_tools(&self, _params: Option<Value>) -> Result<Vec<Tool>, McpError> {
+        Ok(vec![
+            Tool {
+                name: "code_analysis".into(),
+                description: "Analyzes code structure and quality".into(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "language": {"type": "string"}
+                    }
+                }),
+            },
+            // Other available tools...
+        ])
+    }
+
+    async fn execute_tool(&self, params: Option<Value>) -> Result<ToolResult, McpError> {
+        let tool_name = params
+            .and_then(|p| p.get("name"))
+            .and_then(Value::as_str)
+            .ok_or(McpError::InvalidParams)?;
+
+        let tool_args = params
+            .and_then(|p| p.get("arguments"))
+            .ok_or(McpError::InvalidParams)?;
+
+        match tool_name {
+            "code_analysis" => self.tools.analyze_code(tool_args).await,
+            "data_processor" => self.tools.process_data(tool_args).await,
+            _ => Err(McpError::ToolNotFound)
+        }
+    }
+}
+
+// Prompt Management
+impl MyMcpHandler {
+    async fn list_prompts(&self, _params: Option<Value>) -> Result<Vec<Prompt>, McpError> {
+        Ok(vec![
+            Prompt {
+                name: "code_review".into(),
+                description: "Reviews code changes".into(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "language": {"type": "string"}
+                    }
+                }),
+                template: "Review this {language} code:\n\n{code}".into(),
+            },
+            // Other available prompts...
+        ])
+    }
+
+    async fn get_prompt(&self, params: Option<Value>) -> Result<PromptResult, McpError> {
+        let name = params
+            .and_then(|p| p.get("name"))
+            .and_then(Value::as_str)
+            .ok_or(McpError::InvalidParams)?;
+
+        let args = params
+            .and_then(|p| p.get("arguments"))
+            .unwrap_or(&json!({}));
+
+        match name {
+            "code_review" => self.prompts.render_code_review(args).await,
+            "data_analysis" => self.prompts.render_data_analysis(args).await,
+            _ => Err(McpError::PromptNotFound)
+        }
+    }
+}
+
+// Server Information
+impl MyMcpHandler {
+    async fn get_server_info(&self) -> Result<Value, McpError> {
+        Ok(json!({
+            "name": "My MCP Server",
+            "version": "1.0.0",
+            "description": "Custom MCP implementation"
+        }))
+    }
+
+    async fn get_capabilities(&self) -> Result<Value, McpError> {
+        Ok(json!({
+            "resources": {
+                "supports_watching": true,
+                "supported_schemes": ["file", "http"],
+                "max_file_size": 10485760
+            },
+            "tools": {
+                "supports_async": true,
+                "supports_streaming": false
+            },
+            "prompts": {
+                "supports_templates": true,
+                "supports_streaming": false
+            }
+        }))
+    }
+}
+```
+
+This implementation shows how to handle all core MCP protocol methods, including:
+- Resource listing, reading, and watching
+- Tool listing and execution
+- Prompt listing and rendering
+- Server information and capabilities
+- Notification handling
+
+Each method can be customized to provide the specific functionality needed by your server while maintaining protocol compatibility.
