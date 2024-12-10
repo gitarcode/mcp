@@ -21,6 +21,8 @@ pub enum McpError {
     CapabilityNotSupported(String),
     ToolExecutionError(String),
     Custom { code: i32, message: String },
+    ConnectionFailed,
+    ConnectionTimeout,
 }
 
 impl McpError {
@@ -44,6 +46,8 @@ impl McpError {
             McpError::AccessDenied(_) => -32007,
             McpError::ToolExecutionError(_) => -32008,
             McpError::Custom { code, .. } => *code,
+            McpError::ConnectionFailed => -32009,
+            McpError::ConnectionTimeout => -32010,
         }
     }
 }
@@ -69,6 +73,8 @@ impl fmt::Display for McpError {
             McpError::ShutdownTimeout => write!(f, "Shutdown timed out"),
             McpError::ShutdownError(msg) => write!(f, "Shutdown error: {}", msg),
             McpError::Custom { code, message } => write!(f, "Error {}: {}", code, message),
+            McpError::ConnectionFailed => write!(f, "Connection failed"),
+            McpError::ConnectionTimeout => write!(f, "Connection timed out"),
         }
     }
 }
