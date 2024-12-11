@@ -1052,3 +1052,38 @@ Messages are sent as newline-delimited JSON (NDJSON):
 - Each message is a single line of JSON
 - Messages are separated by newlines (`\n`)
 - No length prefixing is needed since JSON is self-delimiting
+
+```
+
+## Logging
+
+This library uses the [`tracing`](https://crates.io/crates/tracing) crate for logging. To see logs from this library in your application, you must initialize a tracing subscriber. For example:
+
+```rust
+// Initialize logging (do this once at your application startup)
+tracing_subscriber::fmt()
+    .with_target(true)
+    .with_thread_ids(true)
+    .with_line_number(true)
+    .init();
+```
+
+You can also control the log level through the `RUST_LOG` environment variable:
+```bash
+RUST_LOG=debug cargo run
+```
+
+### Protocol Logging
+
+In addition to standard logging, this library implements the MCP logging protocol which allows clients to receive logs through the JSON-RPC interface. This happens automatically when using `McpServer` and doesn't require additional setup.
+
+If you want to capture both standard logs and protocol logs, you can combine both subscribers:
+
+```rust
+let mcp_subscriber = McpSubscriber::new(Arc::clone(&server.logging_manager));
+
+tracing_subscriber::registry()
+    .with(tracing_subscriber::fmt::layer())
+    .with(mcp_subscriber)
+    .init();
+```
