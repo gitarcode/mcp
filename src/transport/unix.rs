@@ -145,12 +145,35 @@ impl UnixTransport {
         cmd_rx: mpsc::Receiver<TransportCommand>,
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
-        tracing::debug!("Server task started");
+        tracing::info!("Server task started for socket path: {:?}", path);
         
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            tracing::info!("Creating parent directory: {:?}", parent);
+            if let Err(e) = fs::create_dir_all(parent) {
+                tracing::error!("Failed to create parent directory: {}", e);
+                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                return;
+            }
+        }
+
+        // Remove existing socket if it exists
+        if path.exists() {
+            tracing::info!("Removing existing socket file");
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::error!("Failed to remove existing socket: {}", e);
+                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                return;
+            }
+        }
+
         // Create and bind to the Unix socket
-        tracing::debug!("Creating Unix socket");
+        tracing::info!("Creating Unix socket at {:?}", path);
         let listener = match UnixListener::bind(&path) {
-            Ok(l) => l,
+            Ok(l) => {
+                tracing::info!("Successfully bound to socket");
+                l
+            },
             Err(e) => {
                 tracing::error!("Failed to bind Unix socket: {}", e);
                 let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
@@ -158,28 +181,37 @@ impl UnixTransport {
             }
         };
 
-        // Set socket file permissions to rw-rw----
-        tracing::debug!("Setting socket permissions to 0o660");
+        // Verify socket file exists after binding
+        if !path.exists() {
+            tracing::error!("Socket file does not exist after binding!");
+            let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+            return;
+        }
+
+        // Set socket file permissions
+        tracing::info!("Setting socket permissions to 0o660");
         if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o660)) {
             tracing::error!("Failed to set socket permissions: {}", e);
             let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
             return;
         }
 
-        tracing::debug!("Waiting for connection");
+        tracing::info!("Waiting for connection");
         match listener.accept().await {
             Ok((stream, _addr)) => {
-                tracing::debug!("Connection accepted");
+                tracing::info!("Connection accepted");
                 Self::handle_connection(stream, cmd_rx, event_tx).await;
             }
             Err(e) => {
-                tracing::error!("Failed to accept connection: {:?}", e);
+                tracing::error!("Failed to accept connection: {}", e);
                 let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
             }
         }
 
-        tracing::debug!("Cleaning up socket file");
-        let _ = std::fs::remove_file(path);
+        tracing::info!("Cleaning up socket file");
+        if let Err(e) = std::fs::remove_file(&path) {
+            tracing::error!("Failed to cleanup socket file: {}", e);
+        }
     }
 
     async fn run_client(
@@ -203,37 +235,11 @@ impl UnixTransport {
 #[async_trait]
 impl Transport for UnixTransport {
     async fn start(&mut self) -> Result<TransportChannels, McpError> {
-        tracing::debug!("Transport start called, server_mode: {}", self.server_mode);
+        tracing::info!("Transport start called, server_mode: {}, path: {:?}", 
+            self.server_mode, self.path);
+        
         let (cmd_tx, cmd_rx) = mpsc::channel(self.buffer_size);
         let (event_tx, event_rx) = mpsc::channel(self.buffer_size);
-
-        if self.server_mode {
-            if let Some(parent) = self.path.parent() {
-                tracing::debug!("Creating directory: {:?}", parent);
-                fs::create_dir_all(parent).map_err(|e| {
-                    tracing::error!("Failed to create directory {:?}: {}", parent, e);
-                    McpError::IoError
-                })?;
-                
-                // Only set permissions if we created the directory
-                // Skip permission setting for system directories like /tmp
-                if parent.starts_with("/tmp/mcp") {
-                    tracing::debug!("Setting directory permissions to 0o755");
-                    fs::set_permissions(parent, fs::Permissions::from_mode(0o755)).map_err(|e| {
-                        tracing::error!("Failed to set directory permissions: {}", e);
-                        McpError::IoError
-                    })?;
-                }
-            }
-            
-            if self.path.exists() {
-                tracing::debug!("Removing existing socket file");
-                fs::remove_file(&self.path).map_err(|e| {
-                    tracing::error!("Failed to remove existing socket: {}", e);
-                    McpError::IoError
-                })?;
-            }
-        }
 
         if self.server_mode {
             tokio::spawn(Self::run_server(
