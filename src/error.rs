@@ -23,6 +23,7 @@ pub enum McpError {
     Custom { code: i32, message: String },
     ConnectionFailed,
     ConnectionTimeout,
+    ServerError(String),
 }
 
 impl McpError {
@@ -48,6 +49,7 @@ impl McpError {
             McpError::Custom { code, .. } => *code,
             McpError::ConnectionFailed => -32009,
             McpError::ConnectionTimeout => -32010,
+            McpError::ServerError(_) => -32011,
         }
     }
 }
@@ -75,6 +77,7 @@ impl fmt::Display for McpError {
             McpError::Custom { code, message } => write!(f, "Error {}: {}", code, message),
             McpError::ConnectionFailed => write!(f, "Connection failed"),
             McpError::ConnectionTimeout => write!(f, "Connection timed out"),
+            McpError::ServerError(msg) => write!(f, "Server error: {}", msg),
         }
     }
 }

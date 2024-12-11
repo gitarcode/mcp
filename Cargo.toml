@@ -49,3 +49,4 @@ path = "src/lib.rs"
 [dev-dependencies]
 tempfile = "3.14.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1.0", features = ["full", "test-util"] }
