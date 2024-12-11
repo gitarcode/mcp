@@ -155,7 +155,7 @@ where
 
         let transport = UnixTransport::new_server(
             PathBuf::from(&self.config.server.host),
-            Some(self.config.server.port as usize)
+            Some(1024)
         );
         self.run_transport(transport).await
     }
