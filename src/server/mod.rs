@@ -148,6 +148,8 @@ where
         self.run_transport(transport).await
     }
     pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
+        tracing::info!("Starting Unix transport");
+
         let transport = UnixTransport::new_server(
             PathBuf::from(&self.config.server.host),
             Some(self.config.server.port as usize)
