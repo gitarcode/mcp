@@ -263,22 +263,19 @@ impl Transport for UnixTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::JsonRpcNotification;
+    use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
     use std::time::Duration;
     use tokio::time::sleep;
-    use tracing_subscriber::fmt::format::FmtSpan;
 
     #[tokio::test]
     async fn test_unix_transport() -> Result<(), McpError> {
         // Initialize logging for tests
         let _ = tracing_subscriber::fmt()
             .with_env_filter("debug")
-            .with_span_events(FmtSpan::FULL)
             .try_init();
 
         tokio::time::timeout(Duration::from_secs(5), async {
             tracing::info!("Starting test");
-            // Use a subdirectory in /tmp
             let socket_path = PathBuf::from("/tmp/mcp-test/test_socket");
             
             tracing::info!("Creating transports");
@@ -294,20 +291,48 @@ mod tests {
             tracing::info!("Starting client");
             let client_channels = client.start().await?;
 
-            // Send test messages
-            let test_msg = JsonRpcMessage::Notification(JsonRpcNotification {
+            // Create a test request from client to server
+            let test_request = JsonRpcMessage::Request(JsonRpcRequest {
                 jsonrpc: "2.0".to_string(),
-                method: "test".to_string(),
+                id: 1,
+                method: "test_method".to_string(),
                 params: None,
             });
 
-            client_channels.cmd_tx.send(TransportCommand::SendMessage(test_msg.clone())).await.unwrap();
-            server_channels.cmd_tx.send(TransportCommand::SendMessage(test_msg)).await.unwrap();
+            // Client sends request
+            client_channels.cmd_tx.send(TransportCommand::SendMessage(test_request)).await.unwrap();
 
-            // Wait for messages to be processed
-            sleep(Duration::from_millis(100)).await;
+            // Server should receive the request
+            let mut server_event_rx = server_channels.event_rx.lock().await;
+            if let Some(TransportEvent::Message(received_msg)) = server_event_rx.recv().await {
+                // Server processes request and sends response
+                match received_msg {
+                    JsonRpcMessage::Request(req) => {
+                        let response = JsonRpcMessage::Response(JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: req.id,
+                            result: Some(serde_json::json!("test response")),
+                            error: None,
+                        });
+                        server_channels.cmd_tx.send(TransportCommand::SendMessage(response)).await.unwrap();
+                    },
+                    _ => panic!("Expected request message"),
+                }
+            }
 
-            // Send close commands
+            // Client should receive the response
+            let mut client_event_rx = client_channels.event_rx.lock().await;
+            if let Some(TransportEvent::Message(received_msg)) = client_event_rx.recv().await {
+                match received_msg {
+                    JsonRpcMessage::Response(resp) => {
+                        assert_eq!(resp.id, 1);
+                        assert_eq!(resp.result, Some(serde_json::json!("test response")));
+                    },
+                    _ => panic!("Expected response message"),
+                }
+            }
+
+            // Clean up
             client_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
             server_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
 
