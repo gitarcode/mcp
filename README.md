@@ -1045,3 +1045,10 @@ This implementation shows how to handle all core MCP protocol methods, including
 - Notification handling
 
 Each method can be customized to provide the specific functionality needed by your server while maintaining protocol compatibility.
+
+### Transport Protocol
+
+Messages are sent as newline-delimited JSON (NDJSON):
+- Each message is a single line of JSON
+- Messages are separated by newlines (`\n`)
+- No length prefixing is needed since JSON is self-delimiting

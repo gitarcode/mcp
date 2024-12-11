@@ -6,6 +6,7 @@ use std::{
         Arc, Mutex,
     },
     time::Duration,
+    path::PathBuf,
 };
 use tokio::sync::RwLock;
 use tracing::info;
@@ -24,6 +25,7 @@ use crate::{
     transport::{
         sse::SseTransport,
         stdio::StdioTransport,
+        unix::UnixTransport,
         Transport, TransportChannels, TransportCommand, TransportEvent,
     },
     NotificationSender,
@@ -142,6 +144,13 @@ where
             self.config.server.host.clone(), 
             self.config.server.port,
             1024 // Buffer size
+        );
+        self.run_transport(transport).await
+    }
+    pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
+        let transport = UnixTransport::new_server(
+            PathBuf::from(&self.config.server.host),
+            Some(self.config.server.port as usize)
         );
         self.run_transport(transport).await
     }

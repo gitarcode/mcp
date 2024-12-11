@@ -82,6 +82,7 @@ async fn main() -> Result<(), McpError> {
             TransportType::Stdio => "STDIO",
             TransportType::Sse => "SSE",
             TransportType::WebSocket => "WebSocket",
+            TransportType::Unix => "UNIX",
         }
     );
 
@@ -89,7 +90,10 @@ async fn main() -> Result<(), McpError> {
     let logging_level = config.logging.level.clone();
 
     // Create server instance
-    let handler = BasicRequestHandler::new("MCP Server".to_string(), env!("CARGO_PKG_VERSION").to_string());
+    let handler = BasicRequestHandler::new(
+        config.server.name.clone(),
+        config.server.version.clone()
+    );
     let mut server = McpServer::new(config, handler);
 
     // Set up logging with both standard and MCP subscribers
@@ -199,6 +203,10 @@ async fn main() -> Result<(), McpError> {
                     tracing::info!("Shutting down server...");
                 }
             }
+        }
+        TransportType::Unix => {
+            tracing::info!("Starting server with UNIX transport");
+            server.run_unix_transport().await;
         }
         TransportType::Sse => {
             tracing::info!("Starting server with SSE transport");
