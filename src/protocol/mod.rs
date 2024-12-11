@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::{
     error::McpError,
     transport::{

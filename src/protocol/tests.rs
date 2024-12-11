@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde_json::json;
+    use crate::protocol::{BasicRequestHandler, RequestHandler, ServerCapabilities};
+    use async_trait::async_trait;
+    use serde_json::{json, Value};
+    use crate::error::McpError;
 
     #[tokio::test]
     async fn test_basic_request_handler() {
