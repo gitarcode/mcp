@@ -7,6 +7,8 @@ use tokio::{
     time::{timeout, Duration},
 };
 use async_trait::async_trait;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 
 use crate::error::McpError;
 use super::{
@@ -124,12 +126,15 @@ impl UnixTransport {
                         Err(e) => tracing::error!("Failed to serialize message: {:?}", e),
                     }
                 }
-                TransportCommand::Close => break,
+                TransportCommand::Close => {
+                    // Just break the loop - write_tx will be dropped after the loop
+                    break;
+                }
             }
         }
 
         // Cleanup
-        drop(write_tx);
+        drop(write_tx);  // This ensures pending messages are sent before closing
         let _ = reader_handle.await;
         let _ = writer_handle.await;
         let _ = event_tx.send(TransportEvent::Closed).await;
@@ -140,24 +145,31 @@ impl UnixTransport {
         cmd_rx: mpsc::Receiver<TransportCommand>,
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
-        // Remove existing socket file if it exists
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
-
+        tracing::debug!("Server task started");
+        
         // Create and bind to the Unix socket
+        tracing::debug!("Creating Unix socket");
         let listener = match UnixListener::bind(&path) {
             Ok(l) => l,
             Err(e) => {
-                tracing::error!("Failed to bind Unix socket: {:?}", e);
+                tracing::error!("Failed to bind Unix socket: {}", e);
                 let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
                 return;
             }
         };
 
-        // Accept one connection
+        // Set socket file permissions to rw-rw----
+        tracing::debug!("Setting socket permissions to 0o660");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o660)) {
+            tracing::error!("Failed to set socket permissions: {}", e);
+            let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+            return;
+        }
+
+        tracing::debug!("Waiting for connection");
         match listener.accept().await {
             Ok((stream, _addr)) => {
+                tracing::debug!("Connection accepted");
                 Self::handle_connection(stream, cmd_rx, event_tx).await;
             }
             Err(e) => {
@@ -166,7 +178,7 @@ impl UnixTransport {
             }
         }
 
-        // Cleanup socket file
+        tracing::debug!("Cleaning up socket file");
         let _ = std::fs::remove_file(path);
     }
 
@@ -191,8 +203,37 @@ impl UnixTransport {
 #[async_trait]
 impl Transport for UnixTransport {
     async fn start(&mut self) -> Result<TransportChannels, McpError> {
+        tracing::debug!("Transport start called, server_mode: {}", self.server_mode);
         let (cmd_tx, cmd_rx) = mpsc::channel(self.buffer_size);
         let (event_tx, event_rx) = mpsc::channel(self.buffer_size);
+
+        if self.server_mode {
+            if let Some(parent) = self.path.parent() {
+                tracing::debug!("Creating directory: {:?}", parent);
+                fs::create_dir_all(parent).map_err(|e| {
+                    tracing::error!("Failed to create directory {:?}: {}", parent, e);
+                    McpError::IoError
+                })?;
+                
+                // Only set permissions if we created the directory
+                // Skip permission setting for system directories like /tmp
+                if parent.starts_with("/tmp/mcp") {
+                    tracing::debug!("Setting directory permissions to 0o755");
+                    fs::set_permissions(parent, fs::Permissions::from_mode(0o755)).map_err(|e| {
+                        tracing::error!("Failed to set directory permissions: {}", e);
+                        McpError::IoError
+                    })?;
+                }
+            }
+            
+            if self.path.exists() {
+                tracing::debug!("Removing existing socket file");
+                fs::remove_file(&self.path).map_err(|e| {
+                    tracing::error!("Failed to remove existing socket: {}", e);
+                    McpError::IoError
+                })?;
+            }
+        }
 
         if self.server_mode {
             tokio::spawn(Self::run_server(
@@ -219,19 +260,32 @@ mod tests {
     use crate::protocol::JsonRpcNotification;
     use std::time::Duration;
     use tokio::time::sleep;
+    use tracing_subscriber::fmt::format::FmtSpan;
 
     #[tokio::test]
     async fn test_unix_transport() -> Result<(), McpError> {
+        // Initialize logging for tests
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("debug")
+            .with_span_events(FmtSpan::FULL)
+            .try_init();
+
         tokio::time::timeout(Duration::from_secs(5), async {
-            let socket_path = PathBuf::from("/tmp/test_mcp_socket");
+            tracing::info!("Starting test");
+            // Use a subdirectory in /tmp
+            let socket_path = PathBuf::from("/tmp/mcp-test/test_socket");
             
-            // Create server and client transports
+            tracing::info!("Creating transports");
             let mut server = UnixTransport::new_server(socket_path.clone(), Some(4092));
             let mut client = UnixTransport::new_client(socket_path.clone(), Some(4092));
 
-            // Start server and client
+            tracing::info!("Starting server");
             let server_channels = server.start().await?;
+            
+            tracing::info!("Waiting before starting client");
             sleep(Duration::from_millis(100)).await;
+            
+            tracing::info!("Starting client");
             let client_channels = client.start().await?;
 
             // Send test messages
@@ -244,7 +298,10 @@ mod tests {
             client_channels.cmd_tx.send(TransportCommand::SendMessage(test_msg.clone())).await.unwrap();
             server_channels.cmd_tx.send(TransportCommand::SendMessage(test_msg)).await.unwrap();
 
-            // Send close commands immediately
+            // Wait for messages to be processed
+            sleep(Duration::from_millis(100)).await;
+
+            // Send close commands
             client_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
             server_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
 
