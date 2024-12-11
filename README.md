@@ -74,15 +74,20 @@ mcp = "0.1.0"
 1. Create a basic MCP server:
 
 ```rust
-use mcp::{McpServer, ServerConfig};
+use mcp::{
+    server::{McpServer, ServerConfig},
+    protocol::BasicRequestHandler
+};
 
 #[tokio::main]
 async fn main() -> Result<(), mcp::error::McpError> {
     // Create server with default configuration
-    let server = McpServer::new(ServerConfig::default());
+    let config = ServerConfig::default();
+    let handler = BasicRequestHandler::new("my-server".to_string(), "1.0.0".to_string());
+    let mut server = McpServer::new(config, handler);
     
     // Run the server
-    server.run().await
+    server.run_stdio_transport().await
 }
 ```
 
@@ -198,8 +203,9 @@ This implementation is based on the Model Context Protocol specification and ins
 The main server struct that handles MCP protocol communication.
 
 ```rust
-pub struct McpServer {
+pub struct McpServer<H: RequestHandler> {
     pub config: ServerConfig,
+    pub handler: Arc<H>,
     pub resource_manager: Arc<ResourceManager>,
     pub tool_manager: Arc<ToolManager>,
     pub prompt_manager: Arc<PromptManager>,
@@ -207,9 +213,9 @@ pub struct McpServer {
     // ... internal fields
 }
 
-impl McpServer {
-    // Create a new server instance
-    pub async fn new(config: ServerConfig) -> Self;
+impl<H: RequestHandler> McpServer<H> {
+    // Create a new server instance with a request handler
+    pub fn new(config: ServerConfig, handler: H) -> Self;
     
     // Start server with stdio transport
     pub async fn run_stdio_transport(&mut self) -> Result<(), McpError>;
@@ -400,6 +406,7 @@ Basic example of creating and running an MCP server:
 ```rust
 use mcp_rs::{
     server::{McpServer, ServerConfig},
+    protocol::BasicRequestHandler,
     tools::ToolType,
 };
 
@@ -415,8 +422,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add tools
     config.tools.push(ToolType::Calculator);
     
+    // Create request handler
+    let handler = BasicRequestHandler::new(
+        config.server.name.clone(),
+        config.server.version.clone()
+    );
+    
     // Create and run server
-    let mut server = McpServer::new(config).await;
+    let mut server = McpServer::new(config, handler);
     server.run_stdio_transport().await?;
     
     Ok(())
