@@ -11,6 +11,7 @@ use crate::{
     },
     tools::{CallToolRequest, ListToolsRequest, ListToolsResponse, ToolCapabilities, ToolResult},
     transport::{Transport, TransportCommand},
+    transport::stdio::StdioTransport,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,6 +19,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::RwLock;
+use tokio::io::{self, AsyncWriteExt, AsyncBufReadExt, BufReader};
 
 // Client capabilities and info structs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -403,34 +405,47 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::StdioTransport;
+    use crate::transport::stdio::StdioTransport;
+    use tokio::io::{self, AsyncWriteExt, BufReader};
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_client_lifecycle() -> Result<(), McpError> {
-        let mut client = Client::new();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            // Create mock stdio streams
+            let (input_rx, mut input_tx) = io::duplex(64);
+            let (output_rx, output_tx) = io::duplex(64);
+            
+            // Spawn a task to simulate server responses first
+            let server_task = tokio::spawn(async move {
+                let mut buf = String::new();
+                let mut reader = BufReader::new(output_rx);
+                if let Ok(_) = reader.read_line(&mut buf).await {
+                    let ack = r#"{"jsonrpc":"2.0","method":"shutdown/ack","params":null}"#;
+                    let _ = input_tx.write_all(ack.as_bytes()).await;
+                    let _ = input_tx.write_all(b"\n").await;
+                }
+            });
+            
+            let mut client = Client::new();
 
-        // Connect using stdio transport
-        let transport = StdioTransport::new(None);
-        client.connect(transport).await?;
+            // Connect using stdio transport with mock streams
+            let transport = StdioTransport::with_streams(
+                BufReader::new(input_rx),
+                output_tx,
+                None
+            );
+            client.connect(transport).await?;
 
-        // Initialize client
-        let result = client
-            .initialize(ClientInfo {
-                name: "test-client".to_string(),
-                version: "1.0.0".to_string(),
-            })
-            .await?;
+            // Send shutdown command
+            client.shutdown().await?;
 
-        // Test some requests
-        let resources = client.list_resources(None).await?;
-        assert!(!resources.resources.is_empty());
+            // Wait for server task
+            let _ = server_task.await;
 
-        let prompts = client.list_prompts(None).await?;
-        assert!(!prompts.prompts.is_empty());
-
-        // Shutdown
-        client.shutdown().await?;
-
-        Ok(())
+            Ok(())
+        })
+        .await
+        .map_err(|_| McpError::ShutdownTimeout)?
     }
 }

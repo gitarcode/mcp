@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 use mcp_rs::{
     client::{Client, ClientInfo},
     error::McpError,
-    transport::{SseTransport, StdioTransport},
+    transport::stdio::StdioTransport,
+    transport::sse::SseTransport,
 };
 use serde_json::json;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};

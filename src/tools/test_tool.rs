@@ -77,3 +77,43 @@ impl ToolProvider for PingTool {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        server::{config::ServerConfig, McpServer},
+        protocol::{RequestHandler, ServerCapabilities},
+    };
+    use serde_json::{Value, json};
+    use super::*;
+
+    struct TestHandler;
+
+    #[async_trait]
+    impl RequestHandler for TestHandler {
+        async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+            Ok(json!({"success": true}))
+        }
+
+        async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+            Ok(())
+        }
+
+        fn get_capabilities(&self) -> ServerCapabilities {
+            ServerCapabilities {
+                name: "Test".to_string(),
+                version: "1.0".to_string(),
+                protocol_version: "1.0".to_string(),
+                capabilities: vec!["test".to_string()],
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_custom_handler() {
+        let handler = TestHandler;
+        let server = McpServer::new(ServerConfig::default(), handler);
+        let response = server.process_request("test", Some(json!({}))).await.unwrap();
+        assert_eq!(response, json!({"success": true}));
+    }
+}

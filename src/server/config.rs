@@ -114,6 +114,7 @@ pub enum TransportType {
     Stdio,
     Sse,
     WebSocket,
+    Unix,
 }
 
 impl From<&str> for TransportType {
@@ -122,6 +123,7 @@ impl From<&str> for TransportType {
             "stdio" => TransportType::Stdio,
             "sse" => TransportType::Sse,
             "ws" => TransportType::WebSocket,
+            "unix" => TransportType::Unix,
             _ => TransportType::Stdio,
         }
     }

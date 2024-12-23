@@ -8,6 +8,7 @@ use mcp_rs::{
         config::{ResourceSettings, ServerConfig, ServerSettings, TransportType},
         McpServer,
     },
+    protocol::BasicRequestHandler,
     tools::calculator::CalculatorTool,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -81,6 +82,7 @@ async fn main() -> Result<(), McpError> {
             TransportType::Stdio => "STDIO",
             TransportType::Sse => "SSE",
             TransportType::WebSocket => "WebSocket",
+            TransportType::Unix => "UNIX",
         }
     );
 
@@ -88,7 +90,11 @@ async fn main() -> Result<(), McpError> {
     let logging_level = config.logging.level.clone();
 
     // Create server instance
-    let mut server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new(
+        config.server.name.clone(),
+        config.server.version.clone()
+    );
+    let mut server = McpServer::new(config, handler);
 
     // Set up logging with both standard and MCP subscribers
     let mcp_subscriber = McpSubscriber::new(Arc::clone(&server.logging_manager));
@@ -197,6 +203,10 @@ async fn main() -> Result<(), McpError> {
                     tracing::info!("Shutting down server...");
                 }
             }
+        }
+        TransportType::Unix => {
+            tracing::info!("Starting server with UNIX transport");
+            server.run_unix_transport().await;
         }
         TransportType::Sse => {
             tracing::info!("Starting server with SSE transport");

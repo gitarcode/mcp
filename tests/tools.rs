@@ -4,7 +4,10 @@ use serde_json::json;
 use tokio;
 
 use mcp_rs::{
-    error::McpError, server::{config::ServerConfig, McpServer}, tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult}
+    error::McpError, 
+    server::{config::ServerConfig, McpServer}, 
+    protocol::BasicRequestHandler,
+    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult}
 };
 
 // Mock tool provider for testing
@@ -88,7 +91,8 @@ struct CalculatorParams {
 async fn test_tool_registration_and_listing() {
     // Create test server
     let config = ServerConfig::default();
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
     
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);
@@ -104,7 +108,8 @@ async fn test_tool_registration_and_listing() {
 async fn test_tool_execution() {
     // Create test server
     let config = ServerConfig::default();
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
     
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);
@@ -147,7 +152,8 @@ async fn test_tool_execution() {
 async fn test_invalid_tool() {
     // Create test server
     let config = ServerConfig::default();
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
 
     // Test calling non-existent tool
     let result = server.tool_manager.call_tool(
@@ -168,7 +174,8 @@ async fn test_invalid_tool() {
 async fn test_invalid_arguments() {
     // Create test server
     let config = ServerConfig::default();
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
     
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);

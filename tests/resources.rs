@@ -5,6 +5,7 @@ use mcp_rs::{
     error::McpError,
     resource::FileSystemProvider,
     server::{config::ServerConfig, McpServer},
+    protocol::BasicRequestHandler,
 };
 
 #[tokio::test]
@@ -15,7 +16,8 @@ async fn test_resource_loading_integration() -> Result<(), McpError> {
     config.resources.root_path = PathBuf::from(root_dir.join("tests/resources/test"));
 
     // Initialize server
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
 
     // Register file system provider
     let fs_provider =
@@ -86,7 +88,8 @@ async fn test_resource_templates() -> Result<(), McpError> {
     config.resources.enable_templates = true;
 
     // Initialize server
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
 
     // Register file system provider
     let fs_provider =
@@ -114,7 +117,8 @@ async fn test_resource_errors() -> Result<(), McpError> {
     config.resources.root_path = PathBuf::from(root_dir.join("tests/resources/test"));
 
     // Initialize server
-    let server = McpServer::new(config).await;
+    let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
+    let server = McpServer::new(config, handler);
 
     // Register file system provider
     let fs_provider =

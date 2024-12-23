@@ -1,10 +1,20 @@
+#[cfg(test)]
+mod tests;
+
 use crate::{
     error::McpError,
-    transport::{JsonRpcMessage, Transport, TransportChannels, TransportCommand, TransportEvent},
+    transport::{
+        Transport, TransportChannels, TransportCommand, TransportEvent
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
+use async_trait::async_trait;
+use serde_json::Value;
+
+pub mod types;
+pub use types::*;  // Re-export types
 
 // Constants
 pub const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 60000;
@@ -60,17 +70,16 @@ pub struct Protocol {
     pub event_rx: Option<Arc<tokio::sync::Mutex<mpsc::Receiver<TransportEvent>>>>,
     pub options: ProtocolOptions,
     pub request_message_id: Arc<RwLock<u64>>,
-    pub request_handlers: Arc<RwLock<HashMap<String, RequestHandler>>>,
+    pub request_handlers: Arc<RwLock<HashMap<String, RequestHandlerFn>>>,
     pub notification_handlers: Arc<RwLock<HashMap<String, NotificationHandler>>>,
     pub response_handlers: Arc<RwLock<HashMap<u64, ResponseHandler>>>,
     pub progress_handlers: Arc<RwLock<HashMap<u64, ProgressCallback>>>,
     //request_abort_controllers: Arc<RwLock<HashMap<String, tokio::sync::watch::Sender<bool>>>>,
 }
 
-type RequestHandler = Box<
-    dyn Fn(JsonRpcRequest, RequestHandlerExtra) -> BoxFuture<Result<serde_json::Value, McpError>>
-        + Send
-        + Sync,
+pub type RequestHandlerFn = Box<dyn Fn(JsonRpcRequest, RequestHandlerExtra) -> BoxFuture<Result<serde_json::Value, McpError>>
+    + Send
+    + Sync,
 >;
 type NotificationHandler =
     Box<dyn Fn(JsonRpcNotification) -> BoxFuture<Result<(), McpError>> + Send + Sync>;
@@ -80,7 +89,7 @@ type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send
 // Add new builder struct
 pub struct ProtocolBuilder {
     options: ProtocolOptions,
-    request_handlers: HashMap<String, RequestHandler>,
+    request_handlers: HashMap<String, RequestHandlerFn>,
     notification_handlers: HashMap<String, NotificationHandler>,
 }
 
@@ -93,7 +102,7 @@ impl ProtocolBuilder {
         }
     }
 
-    pub fn with_request_handler(mut self, method: &str, handler: RequestHandler) -> Self {
+    pub fn with_request_handler(mut self, method: &str, handler: RequestHandlerFn) -> Self {
         self.request_handlers.insert(method.to_string(), handler);
         self
     }
@@ -441,7 +450,7 @@ impl Protocol {
         Ok(())
     }
 
-    pub async fn set_request_handler(&mut self, method: &str, handler: RequestHandler) {
+    pub async fn set_request_handler(&mut self, method: &str, handler: RequestHandlerFn) {
         self.assert_request_handler_capability(method)
             .expect("Invalid request handler capability");
 
@@ -500,33 +509,71 @@ pub struct ProgressNotification {
     pub progress_token: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JsonRpcRequest {
-    pub jsonrpc: String,
-    pub id: u64,
-    pub method: String,
-    pub params: Option<serde_json::Value>,
+/// Represents server capabilities that can be advertised to clients
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerCapabilities {
+    /// Server name/identifier
+    pub name: String,
+    /// Server version
+    pub version: String,
+    /// Supported protocol version
+    pub protocol_version: String,
+    /// Available capabilities
+    pub capabilities: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: String,
-    pub id: u64,
-    pub result: Option<serde_json::Value>,
-    pub error: Option<JsonRpcError>,
+/// Core trait for handling MCP protocol requests
+#[async_trait]
+pub trait RequestHandler: Send + Sync {
+    /// Handle an incoming JSON-RPC request
+    async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError>;
+    
+    /// Handle an incoming JSON-RPC notification
+    async fn handle_notification(&self, method: &str, params: Option<Value>) -> Result<(), McpError>;
+    
+    /// Get the server's capabilities
+    fn get_capabilities(&self) -> ServerCapabilities;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct JsonRpcNotification {
-    pub jsonrpc: String,
-    pub method: String,
-    pub params: Option<serde_json::Value>,
+/// Basic implementation of RequestHandler that provides core MCP functionality
+pub struct BasicRequestHandler {
+    capabilities: ServerCapabilities,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    pub data: Option<serde_json::Value>,
+impl BasicRequestHandler {
+    pub fn new(name: String, version: String) -> Self {
+        Self {
+            capabilities: ServerCapabilities {
+                name,
+                version,
+                protocol_version: "0.1.0".to_string(),
+                capabilities: vec![
+                    "server_info".to_string(),
+                    "list_resources".to_string(),
+                    "list_tools".to_string(),
+                    "list_prompts".to_string(),
+                ],
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl RequestHandler for BasicRequestHandler {
+    async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+        match method {
+            "server_info" => Ok(serde_json::to_value(&self.capabilities)?),
+            _ => Err(McpError::MethodNotFound),
+        }
+    }
+
+    async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+        // Basic handler doesn't process any notifications
+        Ok(())
+    }
+
+    fn get_capabilities(&self) -> ServerCapabilities {
+        self.capabilities.clone()
+    }
 }
 
