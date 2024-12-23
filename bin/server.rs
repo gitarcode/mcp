@@ -102,6 +102,7 @@ async fn main() -> Result<(), McpError> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_line_number(true),
