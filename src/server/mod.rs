@@ -196,6 +196,10 @@ where
         });
 
         // Build protocol
+
+        let resource_manager = Arc::clone(&self.resource_manager);
+        let resource_manager2 = Arc::clone(&self.resource_manager);
+
         let mut protocol = Protocol::builder(Some(ProtocolOptions {
             enforce_strict_capabilities: false,
         }))
@@ -221,6 +225,23 @@ where
                     Ok(serde_json::to_value(result).unwrap())
                 })
             }))
+            .with_request_handler("resources/list", Box::new(move |req, _extra| {
+                let resource_manager = Arc::clone(&resource_manager);
+                Box::pin(async move {
+                    let params: ListResourcesRequest = serde_json::from_value(req.params.unwrap_or_default())
+                        .map_err(|_| McpError::InvalidParams)?;
+                    let resources_list = resource_manager.list_resources(params.cursor).await?;
+                    Ok(serde_json::to_value(resources_list).unwrap())
+                })
+            }))
+            .with_request_handler("resources/templates/list", Box::new(move |_req, _extra| {
+                let resource_manager = Arc::clone(&resource_manager2);
+                Box::pin(async move {
+                    let templates_list = resource_manager.list_templates().await?;
+                    Ok(serde_json::to_value(templates_list).unwrap())
+                })
+            }))
+
             .build();
 
         // Connect transport
