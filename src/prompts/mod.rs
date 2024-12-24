@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptArgument {
     pub name: String,
     pub description: String,
@@ -11,6 +12,7 @@ pub struct PromptArgument {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Prompt {
     pub name: String,
     pub description: String,
@@ -19,6 +21,7 @@ pub struct Prompt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum MessageContent {
     #[serde(rename = "text")]
@@ -35,12 +38,14 @@ pub enum MessageContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptMessage {
     pub role: String,
     pub content: MessageContent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptResult {
     pub description: String,
     pub messages: Vec<PromptMessage>,
@@ -48,11 +53,13 @@ pub struct PromptResult {
 
 // Request/Response types
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListPromptsRequest {
     pub cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListPromptsResponse {
     pub prompts: Vec<Prompt>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,12 +67,14 @@ pub struct ListPromptsResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetPromptRequest {
     pub name: String,
     pub arguments: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptCapabilities {
     pub list_changed: bool,
 }

@@ -37,6 +37,7 @@ pub mod config;
 
 // Add initialization types
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     pub protocol_version: String,
     pub capabilities: ClientCapabilities,
@@ -44,34 +45,46 @@ pub struct InitializeParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeResult {
-    pub name: String,
-    pub version: String,
     pub protocol_version: String,
     pub capabilities: ServerCapabilities,
+    pub server_info: InitializeServerInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitializeServerInfo {
+    pub name: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientCapabilities {
     pub roots: Option<RootsCapabilities>,
     pub sampling: Option<SamplingCapabilities>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RootsCapabilities {
     pub list_changed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SamplingCapabilities {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientInfo {
     pub name: String,
     pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
     pub name: String,
     pub version: String,
@@ -192,14 +205,16 @@ where
                         .map_err(|_| McpError::InvalidParams)?;
                     
                     let result = InitializeResult {
-                        name: "test-server".to_string(),
-                        version: "1.0.0".to_string(),
-                        protocol_version: "1.0".to_string(),
+                        protocol_version: "2024-11-05".to_string(),
                         capabilities: ServerCapabilities {
                             logging: Some(LoggingCapabilities {}),
                             prompts: Some(PromptCapabilities { list_changed: false }),
                             resources: Some(ResourceCapabilities { subscribe: false, list_changed: false }),
                             tools: Some(ToolCapabilities { list_changed: false }),
+                        },
+                        server_info: InitializeServerInfo {
+                            name: "test-server".to_string(),
+                            version: "1.0.0".to_string(),
                         },
                     };
 
@@ -265,7 +280,7 @@ mod tests {
                                     result: Some(json!({
                                         "protocol_version": "1.0",
                                         "capabilities": {
-                                            "roots": { "list_changed": true }
+                                            "roots": { "listChanged": true }
                                         },
                                         "client_info": {
                                             "name": "test-client",

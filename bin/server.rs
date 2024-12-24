@@ -97,18 +97,18 @@ async fn main() -> Result<(), McpError> {
     let mut server = McpServer::new(config, handler);
 
     // Set up logging with both standard and MCP subscribers
-    let mcp_subscriber = McpSubscriber::new(Arc::clone(&server.logging_manager));
+    // let mcp_subscriber = McpSubscriber::new(Arc::clone(&server.logging_manager));
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_line_number(true),
-        )
-        .with(mcp_subscriber)
-        .init();
+    // tracing_subscriber::registry()
+    //     .with(
+    //         tracing_subscriber::fmt::layer()
+    //             .with_writer(std::io::stderr)
+    //             .with_target(true)
+    //             .with_thread_ids(true)
+    //             .with_line_number(true),
+    //     )
+    //     .with(mcp_subscriber)
+    //     .init();
 
     // Set initial log level from config
     server

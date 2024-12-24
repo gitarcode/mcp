@@ -11,6 +11,7 @@ use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
 
 // Resource Types
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Resource {
     pub uri: String,
     pub name: String,
@@ -21,6 +22,7 @@ pub struct Resource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceTemplate {
     pub uri_template: String,
     pub name: String,
@@ -31,6 +33,7 @@ pub struct ResourceTemplate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceContent {
     pub uri: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,11 +46,13 @@ pub struct ResourceContent {
 
 // Request/Response types
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListResourcesRequest {
     pub cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListResourcesResponse {
     pub resources: Vec<Resource>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,22 +60,26 @@ pub struct ListResourcesResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadResourceRequest {
     pub uri: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadResourceResponse {
     pub contents: Vec<ResourceContent>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListTemplatesResponse {
     pub resource_templates: Vec<ResourceTemplate>,
 }
 
 // Add notification types
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceUpdatedNotification {
     pub uri: String,
 }
@@ -104,6 +113,7 @@ pub struct ResourceManager {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceCapabilities {
     pub subscribe: bool,
     pub list_changed: bool,

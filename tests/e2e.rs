@@ -63,7 +63,7 @@ async fn test_e2e() {
   // Should be something like this
   assert_eq!(lines, vec![
     r#"
-{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"logging":{},"prompts":{"listChanged":false},"resources":{"listChanged":false,"subscribe":false},"tools":{"listChanged":false}},"name":"test-server","protocolVersion":"1.0","version":"1.0.0"},"error":null}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"logging":{},"prompts":{"listChanged":false},"resources":{"listChanged":false,"subscribe":false},"tools":{"listChanged":false}},"protocolVersion":"2024-11-05","serverInfo":{"name":"test-server","version":"1.0.0"}}}
     "#.trim(),
   ]);
 }

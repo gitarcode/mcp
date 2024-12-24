@@ -5,6 +5,7 @@ use crate::{prompts::Prompt, tools::{Tool, ToolType}};
 
 // Server Configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerConfig {
     pub server: ServerSettings,
     pub resources: ResourceSettings,
@@ -18,6 +19,7 @@ pub struct ServerConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerSettings {
     pub name: String,
     pub version: String,
@@ -29,6 +31,7 @@ pub struct ServerSettings {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceSettings {
     pub root_path: PathBuf,
     pub allowed_schemes: Vec<String>,
@@ -37,6 +40,7 @@ pub struct ResourceSettings {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SecuritySettings {
     pub enable_auth: bool,
     pub token_secret: Option<String>,
@@ -60,12 +64,14 @@ impl Default for SecuritySettings {
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RateLimitSettings {
     pub requests_per_minute: u32,
     pub burst_size: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoggingSettings {
     pub level: String,
     pub file: Option<PathBuf>,
@@ -85,6 +91,7 @@ impl Default for LoggingSettings {
 
 // Add new tool settings struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolSettings {
     pub enabled: bool,
     pub require_confirmation: bool,

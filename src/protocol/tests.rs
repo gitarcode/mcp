@@ -19,7 +19,7 @@ mod tests {
         assert_eq!(caps.name, "test_server");
         assert_eq!(caps.version, "1.0.0");
         assert_eq!(caps.protocol_version, "0.1.0");
-        assert!(caps.capabilities.contains(&"server_info".to_string()));
+        assert!(caps.capabilities.contains(&"serverInfo".to_string()));
         
         // Test invalid method
         let err = handler.handle_request("invalid_method", None).await.unwrap_err();

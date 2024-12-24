@@ -97,7 +97,7 @@ async fn test_list_changed_notification() -> Result<(), McpError> {
     let (server, _temp_dir) = setup_test_server(notif_tx).await;
 
     // Trigger a list changed notification
-    server.resource_manager.notify_list_changed().await?;
+    server.resource_manager.notify_list_changed().await.unwrap();
 
     // Wait for notification
     let timeout = tokio::time::sleep(Duration::from_millis(100));

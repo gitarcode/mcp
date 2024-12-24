@@ -31,6 +31,7 @@ use tokio::{
 use futures::TryStreamExt;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EndpointEvent {
     endpoint: String,
 }

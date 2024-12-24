@@ -33,6 +33,7 @@ impl ToolType {
 
 // Tool Types
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Tool {
     pub name: String,
     pub description: String,
@@ -40,6 +41,7 @@ pub struct Tool {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolInputSchema {
     #[serde(rename = "type")]
     pub schema_type: String,
@@ -49,6 +51,7 @@ pub struct ToolInputSchema {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
+#[serde(rename_all = "camelCase")]
 pub enum ToolContent {
     #[serde(rename = "text")]
     Text { text: String },
@@ -61,6 +64,7 @@ pub enum ToolContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceContent {
     pub uri: String,
     pub mime_type: Option<String>,
@@ -68,6 +72,7 @@ pub struct ResourceContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolResult {
     pub content: Vec<ToolContent>,
     pub is_error: bool,
@@ -75,17 +80,20 @@ pub struct ToolResult {
 
 // Request/Response types
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListToolsRequest {
     pub cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListToolsResponse {
     pub tools: Vec<Tool>,
     pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
@@ -103,6 +111,7 @@ pub trait ToolProvider: Send + Sync {
 
 // Tool Manager
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolCapabilities {
     pub list_changed: bool,
 }

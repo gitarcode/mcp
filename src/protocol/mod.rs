@@ -497,12 +497,14 @@ impl Protocol {
 
 // Helper types for JSON-RPC
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CancelledNotification {
     pub request_id: String,
     pub reason: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressNotification {
     pub progress: u64,
     pub total: Option<u64>,
@@ -511,6 +513,7 @@ pub struct ProgressNotification {
 
 /// Represents server capabilities that can be advertised to clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerCapabilities {
     /// Server name/identifier
     pub name: String,
@@ -548,10 +551,10 @@ impl BasicRequestHandler {
                 version,
                 protocol_version: "0.1.0".to_string(),
                 capabilities: vec![
-                    "server_info".to_string(),
-                    "list_resources".to_string(),
-                    "list_tools".to_string(),
-                    "list_prompts".to_string(),
+                    "serverInfo".to_string(),
+                    "listResources".to_string(),
+                    "listTools".to_string(),
+                    "listPrompts".to_string(),
                 ],
             },
         }

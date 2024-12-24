@@ -50,6 +50,7 @@ impl From<Level> for LogLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LogMessage {
     pub level: LogLevel,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,11 +59,13 @@ pub struct LogMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetLevelRequest {
     pub level: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoggingCapabilities {}
 
 pub struct LoggingManager {
