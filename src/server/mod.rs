@@ -199,6 +199,7 @@ where
 
         let resource_manager = Arc::clone(&self.resource_manager);
         let resource_manager2 = Arc::clone(&self.resource_manager);
+        let tool_manager = Arc::clone(&self.tool_manager);
 
         let mut protocol = Protocol::builder(Some(ProtocolOptions {
             enforce_strict_capabilities: false,
@@ -241,7 +242,15 @@ where
                     Ok(serde_json::to_value(templates_list).unwrap())
                 })
             }))
-
+            .with_request_handler("tools/list", Box::new(move |req, _extra| {
+                let tool_manager = Arc::clone(&tool_manager);
+                Box::pin(async move {
+                    let params: ListToolsRequest = serde_json::from_value(req.params.unwrap_or_default())
+                        .map_err(|_| McpError::InvalidParams)?;
+                    let tools_list = tool_manager.list_tools(params.cursor).await?;
+                    Ok(serde_json::to_value(tools_list).unwrap())
+                })
+            }))
             .build();
 
         // Connect transport
