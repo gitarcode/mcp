@@ -89,6 +89,7 @@ pub struct ListToolsRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ListToolsResponse {
     pub tools: Vec<Tool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
 }
 
