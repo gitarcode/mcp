@@ -90,8 +90,7 @@ impl SseTransport {
                     .stream(async_stream::stream! {
                         yield Ok::<_, warp::Error>(warp::sse::Event::default()
                             .event("endpoint")
-                            .json_data(&EndpointEvent { endpoint })
-                            .unwrap());
+                            .data(endpoint));
 
                         let mut broadcast_rx = broadcast_rx;
                         while let Ok(msg) = broadcast_rx.recv().await {
@@ -108,6 +107,7 @@ impl SseTransport {
             .and(warp::post())
             .and(warp::body::json())
             .map(move |_client_id: u64, message: JsonRpcMessage| {
+                println!("Received message: {:?}", message);
                 let event_tx = event_tx.clone();
                 tokio::spawn(async move {
                     if let Err(e) = event_tx.send(TransportEvent::Message(message)).await {
