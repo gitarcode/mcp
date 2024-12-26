@@ -90,8 +90,7 @@ impl SseTransport {
                     .stream(async_stream::stream! {
                         yield Ok::<_, warp::Error>(warp::sse::Event::default()
                             .event("endpoint")
-                            .json_data(&EndpointEvent { endpoint })
-                            .unwrap());
+                            .data(endpoint));
 
                         let mut broadcast_rx = broadcast_rx;
                         while let Ok(msg) = broadcast_rx.recv().await {
