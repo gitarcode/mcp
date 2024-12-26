@@ -79,7 +79,7 @@ pub struct ToolResult {
 }
 
 // Request/Response types
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ListToolsRequest {
     pub cursor: Option<String>,

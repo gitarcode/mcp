@@ -52,7 +52,7 @@ pub struct PromptResult {
 }
 
 // Request/Response types
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ListPromptsRequest {
     pub cursor: Option<String>,

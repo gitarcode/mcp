@@ -45,7 +45,7 @@ pub struct ResourceContent {
 }
 
 // Request/Response types
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ListResourcesRequest {
     pub cursor: Option<String>,

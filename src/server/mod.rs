@@ -1,33 +1,34 @@
 use config::ServerConfig;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     time::Duration,
-    path::PathBuf,
 };
+use tokio::sync::watch;
 use tokio::sync::RwLock;
 use tracing::info;
-use serde_json::Value;
-use tokio::sync::watch;
 
 use crate::prompts::{GetPromptRequest, ListPromptsRequest, PromptCapabilities, PromptManager};
 use crate::tools::{ToolCapabilities, ToolManager};
 use crate::{
     client::ServerCapabilities,
     error::McpError,
-    logging::{LoggingManager, SetLevelRequest, LoggingCapabilities},
-    protocol::{JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions, RequestHandler, BasicRequestHandler},
+    logging::{LoggingCapabilities, LoggingManager, SetLevelRequest},
     protocol::types::*,
+    protocol::{
+        BasicRequestHandler, JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions,
+        RequestHandler,
+    },
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
     transport::{
-        sse::SseTransport,
-        stdio::StdioTransport,
-        unix::UnixTransport,
-        Transport, TransportChannels, TransportCommand, TransportEvent,
+        sse::SseTransport, stdio::StdioTransport, unix::UnixTransport, Transport,
+        TransportChannels, TransportCommand, TransportEvent,
     },
     NotificationSender,
 };
@@ -101,7 +102,7 @@ enum ServerState {
 
 pub struct McpServer<H>
 where
-    H: RequestHandler + Send + Sync + 'static
+    H: RequestHandler + Send + Sync + 'static,
 {
     pub handler: Arc<H>,
     pub config: ServerConfig,
@@ -118,20 +119,20 @@ where
 
 impl<H> McpServer<H>
 where
-    H: RequestHandler + Send + Sync + 'static
+    H: RequestHandler + Send + Sync + 'static,
 {
     pub fn new(config: ServerConfig, handler: H) -> Self {
         let (notification_tx, notification_rx) = mpsc::channel(100);
         let (state_tx, state_rx) = watch::channel(ServerState::Created);
-        
+
         Self {
             handler: Arc::new(handler),
             config: config.clone(),
-            resource_manager: Arc::new(ResourceManager::new(ResourceCapabilities { 
+            resource_manager: Arc::new(ResourceManager::new(ResourceCapabilities {
                 subscribe: false,
                 list_changed: false,
             })),
-            tool_manager: Arc::new(ToolManager::new(ToolCapabilities { 
+            tool_manager: Arc::new(ToolManager::new(ToolCapabilities {
                 list_changed: false,
             })),
             prompt_manager: Arc::new(PromptManager::new(PromptCapabilities {
@@ -146,7 +147,11 @@ where
         }
     }
 
-    pub async fn process_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+    pub async fn process_request(
+        &self,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<Value, McpError> {
         self.handler.handle_request(method, params).await
     }
 
@@ -157,33 +162,32 @@ where
 
     pub async fn run_sse_transport(&mut self) -> Result<(), McpError> {
         let transport = SseTransport::new_server(
-            self.config.server.host.clone(), 
+            self.config.server.host.clone(),
             self.config.server.port,
-            1024 // Buffer size
+            1024, // Buffer size
         );
         self.run_transport(transport).await
     }
     pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
         tracing::info!("Starting Unix transport");
 
-        let transport = UnixTransport::new_server(
-            PathBuf::from(&self.config.server.host),
-            Some(1024)
-        );
+        let transport =
+            UnixTransport::new_server(PathBuf::from(&self.config.server.host), Some(1024));
         self.run_transport(transport).await
     }
 
     async fn run_transport<T: Transport>(&mut self, transport: T) -> Result<(), McpError> {
         // Take ownership of notification receiver
-        let notification_rx = self.notification_rx.take()
-            .ok_or_else(|| McpError::InternalError("Notification receiver already taken".to_string()))?;
+        let notification_rx = self.notification_rx.take().ok_or_else(|| {
+            McpError::InternalError("Notification receiver already taken".to_string())
+        })?;
 
         // Create shutdown channel
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
-        
+
         // Clone Arc for shutdown handler
         let state = Arc::clone(&self.state);
-        
+
         // Spawn task to watch server state and send shutdown signal
         tokio::spawn(async move {
             loop {
@@ -208,18 +212,28 @@ where
         let mut protocol = Protocol::builder(Some(ProtocolOptions {
             enforce_strict_capabilities: false,
         }))
-            .with_request_handler("initialize", Box::new(|req, _extra| {
+        .with_request_handler(
+            "initialize",
+            Box::new(|req, _extra| {
                 Box::pin(async move {
-                    let params: InitializeParams = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
-                    
+                    let params: InitializeParams =
+                        serde_json::from_value(req.params.unwrap_or_default())
+                            .map_err(|_| McpError::InvalidParams)?;
+
                     let result = InitializeResult {
                         protocol_version: "2024-11-05".to_string(),
                         capabilities: ServerCapabilities {
                             logging: Some(LoggingCapabilities {}),
-                            prompts: Some(PromptCapabilities { list_changed: false }),
-                            resources: Some(ResourceCapabilities { subscribe: false, list_changed: false }),
-                            tools: Some(ToolCapabilities { list_changed: false }),
+                            prompts: Some(PromptCapabilities {
+                                list_changed: false,
+                            }),
+                            resources: Some(ResourceCapabilities {
+                                subscribe: false,
+                                list_changed: false,
+                            }),
+                            tools: Some(ToolCapabilities {
+                                list_changed: false,
+                            }),
                         },
                         server_info: InitializeServerInfo {
                             name: "test-server".to_string(),
@@ -229,69 +243,113 @@ where
 
                     Ok(serde_json::to_value(result).unwrap())
                 })
-            }))
-            .with_request_handler("resources/list", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "resources/list",
+            Box::new(move |req, _extra| {
                 let resource_manager = Arc::clone(&resource_manager);
                 Box::pin(async move {
-                    let params: ListResourcesRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
+                    let params: ListResourcesRequest = req
+                        .params
+                        .map(|params| serde_json::from_value(params))
+                        .transpose()
+                        .map_err(|_| McpError::InvalidParams)?
+                        .unwrap_or_default();
+
                     let resources_list = resource_manager.list_resources(params.cursor).await?;
                     Ok(serde_json::to_value(resources_list).unwrap())
                 })
-            }))
-            .with_request_handler("resources/read", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "resources/read",
+            Box::new(move |req, _extra| {
                 let resource_manager = Arc::clone(&resource_manager2);
                 Box::pin(async move {
-                    let params: ReadResourceRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
+                    let params: ReadResourceRequest =
+                        serde_json::from_value(req.params.unwrap_or_default())
+                            .map_err(|_| McpError::InvalidParams)?;
                     let resource = resource_manager.read_resource(&params.uri).await?;
                     Ok(serde_json::to_value(resource).unwrap())
                 })
-            }))
-            .with_request_handler("resources/templates/list", Box::new(move |_req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "resources/templates/list",
+            Box::new(move |_req, _extra| {
                 let resource_manager = Arc::clone(&resource_manager3);
                 Box::pin(async move {
                     let templates_list = resource_manager.list_templates().await?;
                     Ok(serde_json::to_value(templates_list).unwrap())
                 })
-            }))
-            .with_request_handler("tools/list", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "tools/list",
+            Box::new(move |req, _extra| {
                 let tool_manager = Arc::clone(&tool_manager);
                 Box::pin(async move {
-                    let params: ListToolsRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
+                    let params: ListToolsRequest = req
+                        .params
+                        .map(|params| serde_json::from_value(params))
+                        .transpose()
+                        .map_err(|_| McpError::InvalidParams)?
+                        .unwrap_or_default();
+                    
                     let tools_list = tool_manager.list_tools(params.cursor).await?;
                     Ok(serde_json::to_value(tools_list).unwrap())
                 })
-            }))
-            .with_request_handler("tools/call", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "tools/call",
+            Box::new(move |req, _extra| {
                 let tool_manager = Arc::clone(&tool_manager2);
                 Box::pin(async move {
-                    let params: CallToolRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
-                    let result = tool_manager.call_tool(&params.name, params.arguments).await?;
+                    let params: CallToolRequest =
+                        serde_json::from_value(req.params.unwrap_or_default())
+                            .map_err(|_| McpError::InvalidParams)?;
+                    let result = tool_manager
+                        .call_tool(&params.name, params.arguments)
+                        .await?;
                     Ok(serde_json::to_value(result).unwrap())
                 })
-            }))
-            .with_request_handler("prompts/list", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "prompts/list",
+            Box::new(move |req, _extra| {
                 let prompt_manager = Arc::clone(&prompt_manager);
                 Box::pin(async move {
-                    let params: ListPromptsRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
+                    let params: ListPromptsRequest = req
+                        .params
+                        .map(|params| serde_json::from_value(params))
+                        .transpose()
+                        .map_err(|_| McpError::InvalidParams)?
+                        .unwrap_or_default();
+                    
                     let prompts_list = prompt_manager.list_prompts(params.cursor).await?;
                     Ok(serde_json::to_value(prompts_list).unwrap())
                 })
-            }))
-            .with_request_handler("prompts/get", Box::new(move |req, _extra| {
+            }),
+        )
+        .with_request_handler(
+            "prompts/get",
+            Box::new(move |req, _extra| {
                 let prompt_manager = Arc::clone(&prompt_manager2);
                 Box::pin(async move {
-                    let params: GetPromptRequest = serde_json::from_value(req.params.unwrap_or_default())
-                        .map_err(|_| McpError::InvalidParams)?;
-                    let prompt = prompt_manager.get_prompt(&params.name, params.arguments).await?;
+                    let params: GetPromptRequest =
+                        serde_json::from_value(req.params.unwrap_or_default())
+                            .map_err(|_| McpError::InvalidParams)?;
+                    let prompt = prompt_manager
+                        .get_prompt(&params.name, params.arguments)
+                        .await?;
                     Ok(serde_json::to_value(prompt).unwrap())
                 })
-            }))
-            .build();
+            }),
+        )
+        .build();
 
         // Connect transport
         let protocol_handle = protocol.connect(transport).await?;
@@ -311,10 +369,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-    use tokio::time::sleep;
     use async_trait::async_trait;
     use serde_json::json;
+    use std::time::Duration;
+    use tokio::time::sleep;
 
     struct MockTransport {
         _channels: Option<TransportChannels>,
@@ -331,7 +389,7 @@ mod tests {
         async fn start(&mut self) -> Result<TransportChannels, McpError> {
             let (command_tx, mut command_rx) = mpsc::channel(32);
             let (event_tx, event_rx) = mpsc::channel(32);
-            
+
             let channels = TransportChannels {
                 cmd_tx: command_tx,
                 event_rx: Arc::new(tokio::sync::Mutex::new(event_rx)),
@@ -359,17 +417,20 @@ mod tests {
                                     })),
                                     error: None,
                                 });
-                                
-                                event_tx.send(TransportEvent::Message(response)).await.unwrap();
+
+                                event_tx
+                                    .send(TransportEvent::Message(response))
+                                    .await
+                                    .unwrap();
                             }
-                        },
+                        }
                         TransportCommand::Close => break,
                         _ => {}
                     }
                 }
                 event_tx.send(TransportEvent::Closed).await.unwrap();
             });
-            
+
             self._channels = Some(channels.clone());
             Ok(channels)
         }
@@ -379,14 +440,22 @@ mod tests {
 
     #[async_trait]
     impl RequestHandler for MockHandler {
-        async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+        async fn handle_request(
+            &self,
+            method: &str,
+            params: Option<Value>,
+        ) -> Result<Value, McpError> {
             match method {
                 "test.echo" => Ok(params.unwrap_or(Value::Null)),
-                _ => Ok(Value::Null)
+                _ => Ok(Value::Null),
             }
         }
 
-        async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+        async fn handle_notification(
+            &self,
+            _method: &str,
+            _params: Option<Value>,
+        ) -> Result<(), McpError> {
             Ok(())
         }
 
@@ -408,7 +477,7 @@ mod tests {
 
         // Create server instance
         let mut server = McpServer::new(config, MockHandler);
-        
+
         // Get state and notification sender before moving server
         let notification_tx = server.notification_tx.clone();
         let state = Arc::clone(&server.state);
@@ -435,7 +504,7 @@ mod tests {
 
         // Use the state we cloned earlier instead of trying to get it from server_handle
         let (state_tx, _): &(watch::Sender<ServerState>, watch::Receiver<ServerState>) = &*state;
-        
+
         // Trigger shutdown
         state_tx.send(ServerState::ShuttingDown).unwrap();
 
@@ -443,7 +512,7 @@ mod tests {
         match tokio::time::timeout(Duration::from_secs(1), server_handle).await {
             Ok(result) => {
                 assert!(result.unwrap().is_ok(), "Server should shut down cleanly");
-            },
+            }
             Err(_) => panic!("Server did not shut down within timeout period"),
         }
     }
@@ -455,7 +524,7 @@ mod tests {
         config.server.port = 8080;
 
         let mut server = McpServer::new(config, MockHandler);
-        
+
         // Get notification sender and state before moving server
         let notification_tx = server.notification_tx.clone();
         let state = Arc::clone(&server.state);
@@ -502,7 +571,7 @@ mod tests {
         match tokio::time::timeout(Duration::from_secs(1), server_handle).await {
             Ok(result) => {
                 assert!(result.unwrap().is_ok(), "Server should shut down cleanly");
-            },
+            }
             Err(_) => panic!("Server did not shut down within timeout period"),
         }
     }
