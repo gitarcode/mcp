@@ -107,7 +107,6 @@ impl SseTransport {
             .and(warp::post())
             .and(warp::body::json())
             .map(move |_client_id: u64, message: JsonRpcMessage| {
-                println!("Received message: {:?}", message);
                 let event_tx = event_tx.clone();
                 tokio::spawn(async move {
                     if let Err(e) = event_tx.send(TransportEvent::Message(message)).await {
