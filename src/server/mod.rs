@@ -27,8 +27,8 @@ use crate::{
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
     transport::{
-        sse::SseTransport, stdio::StdioTransport, unix::UnixTransport, Transport,
-        TransportChannels, TransportCommand, TransportEvent,
+        sse::SseTransport, stdio::StdioTransport, Transport, TransportChannels, TransportCommand,
+        TransportEvent,
     },
     NotificationSender,
 };
@@ -168,11 +168,15 @@ where
         );
         self.run_transport(transport).await
     }
+
+    #[cfg(unix)]
     pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
         tracing::info!("Starting Unix transport");
 
-        let transport =
-            UnixTransport::new_server(PathBuf::from(&self.config.server.host), Some(1024));
+        let transport = crate::transport::unix::UnixTransport::new_server(
+            PathBuf::from(&self.config.server.host),
+            Some(1024),
+        );
         self.run_transport(transport).await
     }
 
@@ -296,7 +300,7 @@ where
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
-                    
+
                     let tools_list = tool_manager.list_tools(params.cursor).await?;
                     Ok(serde_json::to_value(tools_list).unwrap())
                 })
@@ -328,7 +332,7 @@ where
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
-                    
+
                     let prompts_list = prompt_manager.list_prompts(params.cursor).await?;
                     Ok(serde_json::to_value(prompts_list).unwrap())
                 })

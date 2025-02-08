@@ -1,7 +1,10 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-use crate::{prompts::Prompt, tools::{Tool, ToolType}};
+use crate::{
+    prompts::Prompt,
+    tools::{Tool, ToolType},
+};
 
 // Server Configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -62,7 +65,6 @@ impl Default for SecuritySettings {
     }
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RateLimitSettings {
@@ -88,7 +90,6 @@ impl Default for LoggingSettings {
     }
 }
 
-
 // Add new tool settings struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +107,7 @@ impl Default for ToolSettings {
             enabled: true,
             require_confirmation: true,
             allowed_tools: vec!["*".to_string()], // Allow all tools by default
-            max_execution_time_ms: 30000, // 30 seconds
+            max_execution_time_ms: 30000,         // 30 seconds
             rate_limit: RateLimitSettings {
                 requests_per_minute: 30,
                 burst_size: 5,
@@ -121,6 +122,7 @@ pub enum TransportType {
     Stdio,
     Sse,
     WebSocket,
+    #[cfg(unix)]
     Unix,
 }
 
@@ -130,6 +132,7 @@ impl From<&str> for TransportType {
             "stdio" => TransportType::Stdio,
             "sse" => TransportType::Sse,
             "ws" => TransportType::WebSocket,
+            #[cfg(unix)]
             "unix" => TransportType::Unix,
             _ => TransportType::Stdio,
         }
@@ -180,7 +183,7 @@ impl Default for ServerConfig {
                 enabled: true,
                 require_confirmation: true,
                 allowed_tools: vec!["*".to_string()], // Allow all tools by default
-                max_execution_time_ms: 30000, // 30 seconds
+                max_execution_time_ms: 30000,         // 30 seconds
                 rate_limit: RateLimitSettings {
                     requests_per_minute: 30,
                     burst_size: 5,

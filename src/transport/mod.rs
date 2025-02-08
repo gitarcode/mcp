@@ -20,7 +20,7 @@ use warp::Filter;
 
 use crate::{
     error::McpError,
-    protocol::types::*,  // Import all JSON-RPC types from protocol
+    protocol::types::*, // Import all JSON-RPC types from protocol
 };
 
 // Message types for the transport actor
@@ -60,4 +60,5 @@ pub mod stdio;
 pub mod sse;
 
 // Unix Domain Socket Transport Implementation
+#[cfg(unix)]
 pub mod unix;
