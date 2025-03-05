@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -37,7 +37,6 @@ struct CalculatorParams {
     a: f64,
     b: Option<f64>, // Some operations like ln() only need one parameter
 }
-
 
 // Domain error types
 #[derive(Debug, thiserror::Error)]
@@ -227,8 +226,8 @@ impl ToolProvider for CalculatorTool {
 #[cfg(test)]
 mod tests {
     use crate::{
-        server::{config::ServerConfig, McpServer},
         protocol::BasicRequestHandler,
+        server::{config::ServerConfig, McpServer},
         tools::ToolContent,
     };
 
@@ -324,9 +323,8 @@ impl RequestHandler for CalculatorHandler {
     async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
         match method {
             "calculate" => {
-                let params: CalculatorParams = serde_json::from_value(
-                    params.ok_or(McpError::InvalidParams)?
-                )?;
+                let params: CalculatorParams =
+                    serde_json::from_value(params.ok_or(McpError::InvalidParams)?)?;
                 let result = self.calculator.calculate(&params)?;
                 Ok(json!({"result": result}))
             }
@@ -334,7 +332,11 @@ impl RequestHandler for CalculatorHandler {
         }
     }
 
-    async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+    async fn handle_notification(
+        &self,
+        _method: &str,
+        _params: Option<Value>,
+    ) -> Result<(), McpError> {
         Ok(()) // Calculator doesn't handle any notifications
     }
 

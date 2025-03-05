@@ -1,13 +1,27 @@
 use mcp_rs::{
-    error::McpError, prompts::{Prompt, PromptCapabilities}, protocol::{JsonRpcNotification, BasicRequestHandler}, resource::{FileSystemProvider, ResourceCapabilities}, server::{config::{LoggingSettings, ResourceSettings, SecuritySettings, ServerConfig, ServerSettings, ToolSettings, TransportType}, McpServer}, NotificationSender
+    error::McpError,
+    prompts::{Prompt, PromptCapabilities},
+    protocol::{BasicRequestHandler, JsonRpcNotification},
+    resource::{FileSystemProvider, ResourceCapabilities},
+    server::{
+        config::{
+            LoggingSettings, ResourceSettings, SecuritySettings, ServerCapabilities, ServerConfig,
+            ServerSettings, ToolSettings, TransportType,
+        },
+        McpServer,
+    },
+    tools::ToolCapabilities,
+    NotificationSender,
 };
-use tokio::sync::mpsc;
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 
-async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<McpServer<BasicRequestHandler>>, TempDir) {
+async fn setup_test_server(
+    notif_tx: mpsc::Sender<JsonRpcNotification>,
+) -> (Arc<McpServer<BasicRequestHandler>>, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    
+
     let config = ServerConfig {
         server: ServerSettings {
             name: "test-server".to_string(),
@@ -33,15 +47,21 @@ async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<
             description: "Test prompt".to_string(),
             arguments: vec![],
         }],
+        capabilities: Some(ServerCapabilities {
+            resources: Some(ResourceCapabilities {
+                list_changed: true,
+                subscribe: true,
+            }),
+            tools: Some(ToolCapabilities { list_changed: true }),
+            prompts: Some(PromptCapabilities { list_changed: true }),
+        }),
     };
 
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let mut server = McpServer::new(config, handler);
-    
+
     // Set up notification sender for all managers
-    let notification_sender = NotificationSender {
-        tx: notif_tx,
-    };
+    let notification_sender = NotificationSender { tx: notif_tx };
 
     // Get mutable access to managers through Arc
     if let Some(resource_manager) = Arc::get_mut(&mut server.resource_manager) {
@@ -50,12 +70,15 @@ async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<
     if let Some(prompt_manager) = Arc::get_mut(&mut server.prompt_manager) {
         prompt_manager.set_notification_sender(notification_sender.clone());
     }
-    
+
     let server = Arc::new(server);
-    
+
     // Register file system provider
     let provider = Arc::new(FileSystemProvider::new(temp_dir.path()));
-    server.resource_manager.register_provider("file".to_string(), provider).await;
+    server
+        .resource_manager
+        .register_provider("file".to_string(), provider)
+        .await;
 
     (server, temp_dir)
 }
@@ -64,17 +87,23 @@ async fn setup_test_server(notif_tx: mpsc::Sender<JsonRpcNotification>) -> (Arc<
 async fn test_resource_update_notification() -> Result<(), McpError> {
     let (notif_tx, mut notif_rx) = mpsc::channel(32);
     let (server, temp_dir) = setup_test_server(notif_tx).await;
-    
+
     // Create a file to monitor
     let test_file = temp_dir.path().join("test.txt");
     std::fs::write(&test_file, "initial content").unwrap();
-    
+
     // Subscribe to the resource
     let uri = format!("file://{}", test_file.display());
-    server.resource_manager.subscribe("test-client".to_string(), uri.clone()).await?;
+    server
+        .resource_manager
+        .subscribe("test-client".to_string(), uri.clone())
+        .await?;
 
     // Trigger a resource update notification
-    server.resource_manager.notify_resource_updated(&uri).await?;
+    server
+        .resource_manager
+        .notify_resource_updated(&uri)
+        .await?;
 
     // Wait for notification
     let timeout = tokio::time::sleep(Duration::from_millis(100));
@@ -86,8 +115,11 @@ async fn test_resource_update_notification() -> Result<(), McpError> {
     };
 
     assert!(notification.is_some());
-    assert_eq!(notification.unwrap().method, "notifications/resources/updated");
-    
+    assert_eq!(
+        notification.unwrap().method,
+        "notifications/resources/updated"
+    );
+
     Ok(())
 }
 
@@ -109,8 +141,11 @@ async fn test_list_changed_notification() -> Result<(), McpError> {
     };
 
     assert!(notification.is_some());
-    assert_eq!(notification.unwrap().method, "notifications/resources/list_changed");
-    
+    assert_eq!(
+        notification.unwrap().method,
+        "notifications/resources/list_changed"
+    );
+
     Ok(())
 }
 
@@ -137,8 +172,11 @@ async fn test_prompt_list_changed_notification() -> Result<(), McpError> {
     };
 
     assert!(notification.is_some());
-    assert_eq!(notification.unwrap().method, "notifications/prompts/list_changed");
-    
+    assert_eq!(
+        notification.unwrap().method,
+        "notifications/prompts/list_changed"
+    );
+
     Ok(())
 }
 
@@ -146,19 +184,28 @@ async fn test_prompt_list_changed_notification() -> Result<(), McpError> {
 async fn test_multiple_subscribers() -> Result<(), McpError> {
     let (notif_tx, mut notif_rx) = mpsc::channel(32);
     let (server, temp_dir) = setup_test_server(notif_tx).await;
-    
+
     // Create a file to monitor
     let test_file = temp_dir.path().join("test.txt");
     std::fs::write(&test_file, "initial content").unwrap();
-    
+
     let uri = format!("file://{}", test_file.display());
 
     // Subscribe multiple clients
-    server.resource_manager.subscribe("client1".to_string(), uri.clone()).await?;
-    server.resource_manager.subscribe("client2".to_string(), uri.clone()).await?;
+    server
+        .resource_manager
+        .subscribe("client1".to_string(), uri.clone())
+        .await?;
+    server
+        .resource_manager
+        .subscribe("client2".to_string(), uri.clone())
+        .await?;
 
     // Trigger a resource update notification
-    server.resource_manager.notify_resource_updated(&uri).await?;
+    server
+        .resource_manager
+        .notify_resource_updated(&uri)
+        .await?;
 
     // Wait for notification
     let timeout = tokio::time::sleep(Duration::from_millis(100));
@@ -170,7 +217,10 @@ async fn test_multiple_subscribers() -> Result<(), McpError> {
     };
 
     assert!(notification.is_some());
-    assert_eq!(notification.unwrap().method, "notifications/resources/updated");
-    
+    assert_eq!(
+        notification.unwrap().method,
+        "notifications/resources/updated"
+    );
+
     Ok(())
 }

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use tokio::fs;
 
 use crate::{
@@ -61,11 +61,13 @@ impl ToolProvider for DirectoryTool {
         match arguments["operation"].as_str() {
             Some("create_directory") => {
                 let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;
-                fs::create_dir_all(path).await.map_err(|_| McpError::IoError)?;
-                
+                fs::create_dir_all(path)
+                    .await
+                    .map_err(|_| McpError::IoError)?;
+
                 Ok(ToolResult {
-                    content: vec![ToolContent::Text { 
-                        text: format!("Created directory: {}", path) 
+                    content: vec![ToolContent::Text {
+                        text: format!("Created directory: {}", path),
                     }],
                     is_error: false,
                 })
@@ -77,26 +79,40 @@ impl ToolProvider for DirectoryTool {
 
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     let file_type = entry.file_type().await.map_err(|_| McpError::IoError)?;
-                    let prefix = if file_type.is_dir() { "[DIR]" } else { "[FILE]" };
-                    listing.push(format!("{} {}", prefix, entry.file_name().to_string_lossy()));
+                    let prefix = if file_type.is_dir() {
+                        "[DIR]"
+                    } else {
+                        "[FILE]"
+                    };
+                    listing.push(format!(
+                        "{} {}",
+                        prefix,
+                        entry.file_name().to_string_lossy()
+                    ));
                 }
 
                 Ok(ToolResult {
-                    content: vec![ToolContent::Text { 
-                        text: listing.join("\n") 
+                    content: vec![ToolContent::Text {
+                        text: listing.join("\n"),
                     }],
                     is_error: false,
                 })
             }
             Some("move_file") => {
-                let source = arguments["source"].as_str().ok_or(McpError::InvalidParams)?;
-                let destination = arguments["destination"].as_str().ok_or(McpError::InvalidParams)?;
-                
-                fs::rename(source, destination).await.map_err(|_| McpError::IoError)?;
-                
+                let source = arguments["source"]
+                    .as_str()
+                    .ok_or(McpError::InvalidParams)?;
+                let destination = arguments["destination"]
+                    .as_str()
+                    .ok_or(McpError::InvalidParams)?;
+
+                fs::rename(source, destination)
+                    .await
+                    .map_err(|_| McpError::IoError)?;
+
                 Ok(ToolResult {
-                    content: vec![ToolContent::Text { 
-                        text: format!("Moved {} to {}", source, destination) 
+                    content: vec![ToolContent::Text {
+                        text: format!("Moved {} to {}", source, destination),
                     }],
                     is_error: false,
                 })

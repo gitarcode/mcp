@@ -43,7 +43,7 @@ pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
     pub data: Option<Value>,
-} 
+}
 
 impl From<crate::error::McpError> for JsonRpcError {
     fn from(error: crate::error::McpError) -> Self {

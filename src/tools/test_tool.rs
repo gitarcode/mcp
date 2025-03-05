@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{error::McpError, server};
+use crate::error::McpError;
 
 use super::{Tool, ToolContent, ToolProvider, ToolResult};
 
@@ -18,7 +18,8 @@ impl ToolProvider for TestTool {
         Tool {
             name: "test_tool".to_string(),
             description: "Test Tool".to_string(),
-            input_schema: serde_json::from_str(r#"{
+            input_schema: serde_json::from_str(
+                r#"{
                 "type": "object",
                 "properties": {
                     "test": {
@@ -27,18 +28,19 @@ impl ToolProvider for TestTool {
                     }
                 },
                 "required": ["test"]
-            }"#).unwrap(),
+            }"#,
+            )
+            .unwrap(),
         }
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(&self, _arguments: serde_json::Value) -> Result<ToolResult, McpError> {
         Ok(ToolResult {
             content: vec![],
             is_error: false,
         })
     }
 }
-
 
 pub struct PingTool;
 
@@ -54,7 +56,8 @@ impl ToolProvider for PingTool {
         Tool {
             name: "ping_tool".to_string(),
             description: "Ping Tool".to_string(),
-            input_schema: serde_json::from_str(r#"{
+            input_schema: serde_json::from_str(
+                r#"{
                 "type": "object",
                 "properties": {
                     "server": {
@@ -63,14 +66,25 @@ impl ToolProvider for PingTool {
                     }
                 },
                 "required": ["server"]
-            }"#).unwrap(),
+            }"#,
+            )
+            .unwrap(),
         }
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
-        let server = arguments.get("server").map(|s| s.as_str()).flatten().unwrap_or("localhost");
-        let res = reqwest::get(format!("http://{}", server)).await.map_err(|e| McpError::ToolExecutionError(e.to_string()))?;
-        let body = res.text().await.map_err(|e| McpError::ToolExecutionError(e.to_string()))?;
+        let server = arguments
+            .get("server")
+            .map(|s| s.as_str())
+            .flatten()
+            .unwrap_or("localhost");
+        let res = reqwest::get(format!("http://{}", server))
+            .await
+            .map_err(|e| McpError::ToolExecutionError(e.to_string()))?;
+        let body = res
+            .text()
+            .await
+            .map_err(|e| McpError::ToolExecutionError(e.to_string()))?;
         Ok(ToolResult {
             content: vec![ToolContent::Text { text: body }],
             is_error: false,
@@ -80,22 +94,30 @@ impl ToolProvider for PingTool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        server::{config::ServerConfig, McpServer},
-        protocol::{RequestHandler, ServerCapabilities},
-    };
-    use serde_json::{Value, json};
     use super::*;
+    use crate::{
+        protocol::{RequestHandler, ServerCapabilities},
+        server::{config::ServerConfig, McpServer},
+    };
+    use serde_json::{json, Value};
 
     struct TestHandler;
 
     #[async_trait]
     impl RequestHandler for TestHandler {
-        async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+        async fn handle_request(
+            &self,
+            _method: &str,
+            _params: Option<Value>,
+        ) -> Result<Value, McpError> {
             Ok(json!({"success": true}))
         }
 
-        async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+        async fn handle_notification(
+            &self,
+            _method: &str,
+            _params: Option<Value>,
+        ) -> Result<(), McpError> {
             Ok(())
         }
 
@@ -113,7 +135,10 @@ mod tests {
     async fn test_custom_handler() {
         let handler = TestHandler;
         let server = McpServer::new(ServerConfig::default(), handler);
-        let response = server.process_request("test", Some(json!({}))).await.unwrap();
+        let response = server
+            .process_request("test", Some(json!({})))
+            .await
+            .unwrap();
         assert_eq!(response, json!({"success": true}));
     }
 }

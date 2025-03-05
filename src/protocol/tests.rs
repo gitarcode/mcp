@@ -1,28 +1,28 @@
 #[cfg(test)]
 mod tests {
+    use crate::error::McpError;
     use crate::protocol::{BasicRequestHandler, RequestHandler, ServerCapabilities};
     use async_trait::async_trait;
     use serde_json::{json, Value};
-    use crate::error::McpError;
 
     #[tokio::test]
     async fn test_basic_request_handler() {
-        let handler = BasicRequestHandler::new(
-            "test_server".to_string(),
-            "1.0.0".to_string(),
-        );
+        let handler = BasicRequestHandler::new("test_server".to_string(), "1.0.0".to_string());
 
         // Test server_info request
         let result = handler.handle_request("server_info", None).await.unwrap();
         let caps = serde_json::from_value::<ServerCapabilities>(result).unwrap();
-        
+
         assert_eq!(caps.name, "test_server");
         assert_eq!(caps.version, "1.0.0");
         assert_eq!(caps.protocol_version, "0.1.0");
         assert!(caps.capabilities.contains(&"serverInfo".to_string()));
-        
+
         // Test invalid method
-        let err = handler.handle_request("invalid_method", None).await.unwrap_err();
+        let err = handler
+            .handle_request("invalid_method", None)
+            .await
+            .unwrap_err();
         assert!(matches!(err, McpError::MethodNotFound));
     }
 
@@ -34,14 +34,22 @@ mod tests {
 
         #[async_trait]
         impl RequestHandler for CustomHandler {
-            async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+            async fn handle_request(
+                &self,
+                method: &str,
+                params: Option<Value>,
+            ) -> Result<Value, McpError> {
                 match method {
                     "custom_method" => Ok(json!({ "result": "custom" })),
                     _ => self.basic.handle_request(method, params).await,
                 }
             }
 
-            async fn handle_notification(&self, method: &str, params: Option<Value>) -> Result<(), McpError> {
+            async fn handle_notification(
+                &self,
+                method: &str,
+                params: Option<Value>,
+            ) -> Result<(), McpError> {
                 self.basic.handle_notification(method, params).await
             }
 
@@ -64,4 +72,4 @@ mod tests {
         let caps = handler.get_capabilities();
         assert!(caps.capabilities.contains(&"custom_method".to_string()));
     }
-} 
+}

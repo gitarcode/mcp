@@ -1,13 +1,13 @@
-use std::{collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 use serde_json::json;
+use std::{collections::HashMap, sync::Arc};
 use tokio;
 
 use mcp_rs::{
-    error::McpError, 
-    server::{config::ServerConfig, McpServer}, 
+    error::McpError,
     protocol::BasicRequestHandler,
-    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult}
+    server::{config::ServerConfig, McpServer},
+    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
 };
 
 // Mock tool provider for testing
@@ -44,14 +44,17 @@ impl ToolProvider for MockCalculatorTool {
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
                 properties,
-                required: vec!["operation", "a", "b"].iter().map(|s| s.to_string()).collect(),
+                required: vec!["operation", "a", "b"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             },
         }
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
-        let params: CalculatorParams = serde_json::from_value(arguments)
-            .map_err(|_| McpError::InvalidParams)?;
+        let params: CalculatorParams =
+            serde_json::from_value(arguments).map_err(|_| McpError::InvalidParams)?;
 
         let result = match params.operation.as_str() {
             "add" => params.a + params.b,
@@ -60,20 +63,20 @@ impl ToolProvider for MockCalculatorTool {
             "divide" => {
                 if params.b == 0.0 {
                     return Ok(ToolResult {
-                        content: vec![ToolContent::Text { 
-                            text: "Division by zero".to_string() 
+                        content: vec![ToolContent::Text {
+                            text: "Division by zero".to_string(),
                         }],
                         is_error: true,
                     });
                 }
                 params.a / params.b
-            },
+            }
             _ => return Err(McpError::InvalidParams),
         };
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: result.to_string() 
+            content: vec![ToolContent::Text {
+                text: result.to_string(),
             }],
             is_error: false,
         })
@@ -93,7 +96,7 @@ async fn test_tool_registration_and_listing() {
     let config = ServerConfig::default();
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
-    
+
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);
     server.tool_manager.register_tool(tool_provider).await;
@@ -110,20 +113,24 @@ async fn test_tool_execution() {
     let config = ServerConfig::default();
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
-    
+
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);
     server.tool_manager.register_tool(tool_provider).await;
 
     // Test addition
-    let result = server.tool_manager.call_tool(
-        "calculator",
-        json!({
-            "operation": "add",
-            "a": 5,
-            "b": 3
-        })
-    ).await.unwrap();
+    let result = server
+        .tool_manager
+        .call_tool(
+            "calculator",
+            json!({
+                "operation": "add",
+                "a": 5,
+                "b": 3
+            }),
+        )
+        .await
+        .unwrap();
 
     match &result.content[0] {
         ToolContent::Text { text } => assert_eq!(text, "8"),
@@ -132,14 +139,18 @@ async fn test_tool_execution() {
     assert!(!result.is_error);
 
     // Test division by zero
-    let result = server.tool_manager.call_tool(
-        "calculator",
-        json!({
-            "operation": "divide",
-            "a": 1,
-            "b": 0
-        })
-    ).await.unwrap();
+    let result = server
+        .tool_manager
+        .call_tool(
+            "calculator",
+            json!({
+                "operation": "divide",
+                "a": 1,
+                "b": 0
+            }),
+        )
+        .await
+        .unwrap();
 
     match &result.content[0] {
         ToolContent::Text { text } => assert_eq!(text, "Division by zero"),
@@ -156,16 +167,16 @@ async fn test_invalid_tool() {
     let server = McpServer::new(config, handler);
 
     // Test calling non-existent tool
-    let result = server.tool_manager.call_tool(
-        "nonexistent",
-        json!({})
-    ).await;
+    let result = server
+        .tool_manager
+        .call_tool("nonexistent", json!({}))
+        .await;
 
     assert!(result.is_err());
     match result {
         Err(McpError::InvalidRequest(msg)) => {
             assert!(msg.contains("Unknown tool"));
-        },
+        }
         _ => panic!("Expected InvalidRequest error"),
     }
 }
@@ -176,20 +187,23 @@ async fn test_invalid_arguments() {
     let config = ServerConfig::default();
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
-    
+
     // Register mock tool
     let tool_provider = Arc::new(MockCalculatorTool);
     server.tool_manager.register_tool(tool_provider).await;
 
     // Test invalid operation
-    let result = server.tool_manager.call_tool(
-        "calculator",
-        json!({
-            "operation": "invalid",
-            "a": 1,
-            "b": 2
-        })
-    ).await.unwrap();
+    let result = server
+        .tool_manager
+        .call_tool(
+            "calculator",
+            json!({
+                "operation": "invalid",
+                "a": 1,
+                "b": 2
+            }),
+        )
+        .await;
 
-    assert!(result.is_error);
+    assert!(result.is_err());
 }

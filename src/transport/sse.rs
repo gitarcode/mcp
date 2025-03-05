@@ -1,3 +1,4 @@
+use reqwest_eventsource::{Event, EventSource};
 use std::{
     net::IpAddr,
     sync::{
@@ -6,29 +7,15 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{
-    sync::{broadcast, mpsc},
-};
+use tokio::sync::mpsc;
 use warp::Filter;
-use reqwest_eventsource::{Event, EventSource};
 
+use super::{JsonRpcMessage, Transport, TransportChannels, TransportCommand, TransportEvent};
 use crate::error::McpError;
-use super::{
-    Transport, 
-    TransportChannels,
-    TransportCommand,
-    TransportEvent,
-    JsonRpcMessage,
-};
 
 use async_trait::async_trait;
-use reqwest::Client;
-use url::Url;
-use serde::{Deserialize, Serialize};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt},
-};
 use futures::TryStreamExt;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,14 +65,13 @@ impl SseTransport {
         let host_clone = host.clone();
 
         // SSE endpoint route
-        let sse_route = warp::path("sse")
-            .and(warp::get())
-            .map(move || {
-                let client_id = client_counter.fetch_add(1, Ordering::SeqCst);
-                let broadcast_rx = broadcast_tx.subscribe();
-                let endpoint = format!("http://{}:{}/message/{}", host.clone(), port, client_id);
+        let sse_route = warp::path("sse").and(warp::get()).map(move || {
+            let client_id = client_counter.fetch_add(1, Ordering::SeqCst);
+            let broadcast_rx = broadcast_tx.subscribe();
+            let endpoint = format!("http://{}:{}/message/{}", host.clone(), port, client_id);
 
-                warp::sse::reply(warp::sse::keep_alive()
+            warp::sse::reply(
+                warp::sse::keep_alive()
                     .interval(Duration::from_secs(30))
                     .stream(async_stream::stream! {
                         yield Ok::<_, warp::Error>(warp::sse::Event::default()
@@ -99,8 +85,9 @@ impl SseTransport {
                                 .json_data(&msg)
                                 .unwrap());
                         }
-                    }))
-            });
+                    }),
+            )
+        });
 
         // Message receiving route
         let message_route = warp::path!("message" / u64)
@@ -126,33 +113,35 @@ impl SseTransport {
                     TransportCommand::SendMessage(msg) => {
                         // Skip broadcasting debug log messages about SSE and internal operations
                         let should_skip = match &msg {
-                            JsonRpcMessage::Notification(n) if n.method == "notifications/message" => {
+                            JsonRpcMessage::Notification(n)
+                                if n.method == "notifications/message" =>
+                            {
                                 if let Some(params) = &n.params {
                                     // Check the log message and logger
-                                    let is_debug = params.get("level")
+                                    let is_debug = params
+                                        .get("level")
                                         .and_then(|l| l.as_str())
                                         .map_or(false, |l| l == "debug");
-                                    
-                                    let logger = params.get("logger")
-                                        .and_then(|l| l.as_str())
-                                        .unwrap_or("");
 
-                                    let message = params.get("data")
+                                    let logger =
+                                        params.get("logger").and_then(|l| l.as_str()).unwrap_or("");
+
+                                    let message = params
+                                        .get("data")
                                         .and_then(|d| d.get("message"))
                                         .and_then(|m| m.as_str())
                                         .unwrap_or("");
 
-                                    is_debug && (
-                                        logger.starts_with("hyper::") ||
-                                        logger.starts_with("mcp_rs::transport") ||
-                                        message.contains("Broadcasting SSE message") ||
-                                        message.contains("Failed to broadcast message")
-                                    )
+                                    is_debug
+                                        && (logger.starts_with("hyper::")
+                                            || logger.starts_with("mcp_rs::transport")
+                                            || message.contains("Broadcasting SSE message")
+                                            || message.contains("Failed to broadcast message"))
                                 } else {
                                     false
                                 }
                             }
-                            _ => false
+                            _ => false,
                         };
 
                         if !should_skip {
@@ -189,7 +178,9 @@ impl SseTransport {
             Ok(es) => es,
             Err(e) => {
                 tracing::error!("Failed to create EventSource: {:?}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::ConnectionClosed)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::ConnectionClosed))
+                    .await;
                 return;
             }
         };
@@ -199,7 +190,9 @@ impl SseTransport {
             Some(ep) => ep,
             None => {
                 tracing::error!("Failed to receive endpoint");
-                let _ = event_tx.send(TransportEvent::Error(McpError::ConnectionClosed)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::ConnectionClosed))
+                    .await;
                 return;
             }
         };
@@ -247,7 +240,9 @@ impl SseTransport {
         while let Ok(Some(event)) = sse.try_next().await {
             if let Event::Message(m) = event {
                 if m.event == "endpoint" {
-                    return serde_json::from_str::<EndpointEvent>(&m.data).ok().map(|e| e.endpoint);
+                    return serde_json::from_str::<EndpointEvent>(&m.data)
+                        .ok()
+                        .map(|e| e.endpoint);
                 }
             }
         }

@@ -1,7 +1,7 @@
+use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,51 +101,60 @@ impl PromptManager {
     pub async fn register_prompt(&self, prompt: Prompt) {
         let mut prompts = self.prompts.write().await;
         prompts.insert(prompt.name.clone(), prompt);
-        
+
         // Notify about list change
         self.notify_list_changed().await.ok();
     }
 
-    pub async fn list_prompts(&self, _cursor: Option<String>) -> Result<ListPromptsResponse, McpError> {
+    pub async fn list_prompts(
+        &self,
+        _cursor: Option<String>,
+    ) -> Result<ListPromptsResponse, McpError> {
         let prompts = self.prompts.read().await;
         let prompts: Vec<_> = prompts.values().cloned().collect();
-        
+
         Ok(ListPromptsResponse {
             prompts,
             next_cursor: None, // Implement pagination if needed
         })
     }
 
-    pub async fn get_prompt(&self, name: &str, arguments: Option<serde_json::Value>) -> Result<PromptResult, McpError> {
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<PromptResult, McpError> {
         let prompts = self.prompts.read().await;
-        let prompt = prompts.get(name)
+        let prompt = prompts
+            .get(name)
             .ok_or_else(|| McpError::InvalidRequest(format!("Unknown prompt: {}", name)))?;
 
         // Validate required arguments
         if let Some(args) = &arguments {
             for arg in prompt.arguments.iter().filter(|a| a.required) {
                 if !args.get(&arg.name).is_some() {
-                    return Err(McpError::InvalidRequest(
-                        format!("Missing required argument: {}", arg.name)
-                    ));
+                    return Err(McpError::InvalidRequest(format!(
+                        "Missing required argument: {}",
+                        arg.name
+                    )));
                 }
             }
         } else if prompt.arguments.iter().any(|a| a.required) {
-            return Err(McpError::InvalidRequest("Missing required arguments".to_string()));
+            return Err(McpError::InvalidRequest(
+                "Missing required arguments".to_string(),
+            ));
         }
 
         // Here you would generate the actual prompt messages based on the template
         // This is a simple example
         Ok(PromptResult {
             description: prompt.description.clone(),
-            messages: vec![
-                PromptMessage {
-                    role: "user".to_string(),
-                    content: MessageContent::Text { 
-                        text: format!("Using prompt: {}", prompt.name)
-                    },
+            messages: vec![PromptMessage {
+                role: "user".to_string(),
+                content: MessageContent::Text {
+                    text: format!("Using prompt: {}", prompt.name),
                 },
-            ],
+            }],
         })
     }
 
@@ -161,7 +170,10 @@ impl PromptManager {
                 params: None,
             };
 
-            sender.tx.send(notification).await
+            sender
+                .tx
+                .send(notification)
+                .await
                 .map_err(|e| McpError::InternalError(format!("Notification error: {}", e)))?;
         }
         Ok(())
@@ -181,13 +193,11 @@ mod tests {
         let prompt = Prompt {
             name: "test".to_string(),
             description: "Test prompt".to_string(),
-            arguments: vec![
-                PromptArgument {
-                    name: "arg1".to_string(),
-                    description: "First argument".to_string(),
-                    required: true,
-                },
-            ],
+            arguments: vec![PromptArgument {
+                name: "arg1".to_string(),
+                description: "First argument".to_string(),
+                required: true,
+            }],
         };
 
         manager.register_prompt(prompt.clone()).await;

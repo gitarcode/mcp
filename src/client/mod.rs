@@ -4,22 +4,23 @@ use crate::{
     prompts::{
         GetPromptRequest, ListPromptsRequest, ListPromptsResponse, PromptCapabilities, PromptResult,
     },
-    protocol::{JsonRpcNotification, Protocol, ProtocolHandle, ProtocolOptions},
+    protocol::{Protocol, ProtocolHandle, ProtocolOptions},
     resource::{
         ListResourcesRequest, ListResourcesResponse, ReadResourceRequest, ReadResourceResponse,
         ResourceCapabilities,
     },
     tools::{CallToolRequest, ListToolsRequest, ListToolsResponse, ToolCapabilities, ToolResult},
     transport::{Transport, TransportCommand},
-    transport::stdio::StdioTransport,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    sync::{atomic::{AtomicBool, Ordering}, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 use tokio::sync::RwLock;
-use tokio::io::{self, AsyncWriteExt, AsyncBufReadExt, BufReader};
 
 // Client capabilities and info structs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +100,10 @@ impl Client {
         }
     }
 
-    pub async fn connect<T: Transport>(&mut self, transport: T) -> Result<ProtocolHandle, McpError> {
+    pub async fn connect<T: Transport>(
+        &mut self,
+        transport: T,
+    ) -> Result<ProtocolHandle, McpError> {
         let timeout = Duration::from_secs(30);
         match tokio::time::timeout(timeout, self.protocol.connect(transport)).await {
             Ok(result) => result,
@@ -414,8 +418,8 @@ impl Client {
 mod tests {
     use super::*;
     use crate::transport::stdio::StdioTransport;
-    use tokio::io::{self, AsyncWriteExt, BufReader};
     use std::time::Duration;
+    use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     #[tokio::test]
     async fn test_client_lifecycle() -> Result<(), McpError> {
@@ -423,7 +427,7 @@ mod tests {
             // Create mock stdio streams
             let (input_rx, mut input_tx) = io::duplex(64);
             let (output_rx, output_tx) = io::duplex(64);
-            
+
             // Spawn a task to simulate server responses first
             let server_task = tokio::spawn(async move {
                 let mut buf = String::new();
@@ -434,15 +438,11 @@ mod tests {
                     let _ = input_tx.write_all(b"\n").await;
                 }
             });
-            
+
             let mut client = Client::new();
 
             // Connect using stdio transport with mock streams
-            let transport = StdioTransport::with_streams(
-                BufReader::new(input_rx),
-                output_tx,
-                None
-            );
+            let transport = StdioTransport::with_streams(BufReader::new(input_rx), output_tx, None);
             client.connect(transport).await?;
 
             // Send shutdown command

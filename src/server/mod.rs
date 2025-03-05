@@ -1,14 +1,7 @@
 use config::ServerConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::watch;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -18,19 +11,11 @@ use crate::tools::{ToolCapabilities, ToolManager};
 use crate::{
     client::ServerCapabilities,
     error::McpError,
-    logging::{LoggingCapabilities, LoggingManager, SetLevelRequest},
-    protocol::types::*,
-    protocol::{
-        BasicRequestHandler, JsonRpcNotification, Protocol, ProtocolBuilder, ProtocolOptions,
-        RequestHandler,
-    },
+    logging::{LoggingCapabilities, LoggingManager},
+    protocol::{JsonRpcNotification, Protocol, ProtocolOptions, RequestHandler},
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
-    transport::{
-        sse::SseTransport, stdio::StdioTransport, unix::UnixTransport, Transport,
-        TransportChannels, TransportCommand, TransportEvent,
-    },
-    NotificationSender,
+    transport::{sse::SseTransport, stdio::StdioTransport, Transport},
 };
 use tokio::sync::mpsc;
 
@@ -92,6 +77,7 @@ pub struct ServerInfo {
 }
 
 // Add server state enum
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ServerState {
     Created,
@@ -100,6 +86,7 @@ enum ServerState {
     ShuttingDown,
 }
 
+#[allow(dead_code)]
 pub struct McpServer<H>
 where
     H: RequestHandler + Send + Sync + 'static,
@@ -129,14 +116,22 @@ where
             handler: Arc::new(handler),
             config: config.clone(),
             resource_manager: Arc::new(ResourceManager::new(ResourceCapabilities {
-                subscribe: false,
-                list_changed: false,
+                subscribe: config.capabilities.as_ref().map_or(false, |c| {
+                    c.resources.as_ref().map_or(false, |r| r.subscribe)
+                }),
+                list_changed: config.capabilities.as_ref().map_or(false, |c| {
+                    c.resources.as_ref().map_or(false, |r| r.list_changed)
+                }),
             })),
             tool_manager: Arc::new(ToolManager::new(ToolCapabilities {
-                list_changed: false,
+                list_changed: config.capabilities.as_ref().map_or(false, |c| {
+                    c.tools.as_ref().map_or(false, |t| t.list_changed)
+                }),
             })),
             prompt_manager: Arc::new(PromptManager::new(PromptCapabilities {
-                list_changed: false,
+                list_changed: config.capabilities.as_ref().map_or(false, |c| {
+                    c.prompts.as_ref().map_or(false, |p| p.list_changed)
+                }),
             })),
             logging_manager: Arc::new(tokio::sync::Mutex::new(LoggingManager::new())),
             notification_tx,
@@ -168,17 +163,21 @@ where
         );
         self.run_transport(transport).await
     }
+
+    #[cfg(unix)]
     pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
         tracing::info!("Starting Unix transport");
 
-        let transport =
-            UnixTransport::new_server(PathBuf::from(&self.config.server.host), Some(1024));
+        let transport = crate::transport::unix::UnixTransport::new_server(
+            PathBuf::from(&self.config.server.host),
+            Some(1024),
+        );
         self.run_transport(transport).await
     }
 
     async fn run_transport<T: Transport>(&mut self, transport: T) -> Result<(), McpError> {
         // Take ownership of notification receiver
-        let notification_rx = self.notification_rx.take().ok_or_else(|| {
+        let _notification_rx = self.notification_rx.take().ok_or_else(|| {
             McpError::InternalError("Notification receiver already taken".to_string())
         })?;
 
@@ -216,7 +215,7 @@ where
             "initialize",
             Box::new(|req, _extra| {
                 Box::pin(async move {
-                    let params: InitializeParams =
+                    let _params: InitializeParams =
                         serde_json::from_value(req.params.unwrap_or_default())
                             .map_err(|_| McpError::InvalidParams)?;
 
@@ -296,7 +295,7 @@ where
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
-                    
+
                     let tools_list = tool_manager.list_tools(params.cursor).await?;
                     Ok(serde_json::to_value(tools_list).unwrap())
                 })
@@ -328,7 +327,7 @@ where
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
-                    
+
                     let prompts_list = prompt_manager.list_prompts(params.cursor).await?;
                     Ok(serde_json::to_value(prompts_list).unwrap())
                 })
@@ -368,6 +367,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        protocol::{JsonRpcMessage, JsonRpcResponse},
+        transport::{TransportChannels, TransportCommand, TransportEvent},
+    };
+
     use super::*;
     use async_trait::async_trait;
     use serde_json::json;

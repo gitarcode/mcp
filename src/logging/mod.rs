@@ -68,6 +68,7 @@ pub struct SetLevelRequest {
 #[serde(rename_all = "camelCase")]
 pub struct LoggingCapabilities {}
 
+#[allow(dead_code)]
 pub struct LoggingManager {
     current_level: LogLevel,
     notification_sender: Option<NotificationSender>,
@@ -108,21 +109,22 @@ impl LoggingManager {
             if matches!(&message.level, LogLevel::Debug) {
                 // Skip if logger is hyper or internal transport
                 if let Some(logger) = &message.logger {
-                    if logger.starts_with("hyper::") || 
-                       logger.starts_with("mcp_rs::transport") {
+                    if logger.starts_with("hyper::") || logger.starts_with("mcp_rs::transport") {
                         return Ok(());
                     }
                 }
 
                 // Skip transport-related messages
-                if message.data.get("message")
+                if message
+                    .data
+                    .get("message")
                     .and_then(|m| m.as_str())
                     .map_or(false, |m| {
-                        m.contains("Broadcasting SSE message") || 
-                        m.contains("Failed to broadcast message") ||
-                        m.contains("-> ") ||
-                        m.contains("<- ")
-                    }) 
+                        m.contains("Broadcasting SSE message")
+                            || m.contains("Failed to broadcast message")
+                            || m.contains("-> ")
+                            || m.contains("<- ")
+                    })
                 {
                     return Ok(());
                 }

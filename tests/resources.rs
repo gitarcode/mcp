@@ -3,9 +3,9 @@ use tokio;
 
 use mcp_rs::{
     error::McpError,
+    protocol::BasicRequestHandler,
     resource::FileSystemProvider,
     server::{config::ServerConfig, McpServer},
-    protocol::BasicRequestHandler,
 };
 
 #[tokio::test]
@@ -131,10 +131,9 @@ async fn test_resource_errors() -> Result<(), McpError> {
     // Test non-existent resource
     let result = server
         .resource_manager
-        .read_resource("file:///nonexistent.txt")
+        .read_resource("file://nonexistent.txt")
         .await;
     assert!(result.is_err());
-    println!("Result: {:?}", result);
     match result {
         Err(McpError::ResourceNotFound(_)) => (),
         _ => panic!("Expected ResourceNotFound error"),
@@ -143,7 +142,7 @@ async fn test_resource_errors() -> Result<(), McpError> {
     // Test path traversal attempt
     let result = server
         .resource_manager
-        .read_resource("file:///../secret.txt")
+        .read_resource("file://../secret.txt")
         .await;
     assert!(result.is_err());
     match result {

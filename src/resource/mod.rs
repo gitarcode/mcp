@@ -1,11 +1,10 @@
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use mime::Mime;
 use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use tokio::sync::mpsc;
 
 use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
 
@@ -84,22 +83,24 @@ pub struct ResourceUpdatedNotification {
     pub uri: String,
 }
 
-
 // Resource Provider trait
 #[async_trait]
 pub trait ResourceProvider: Send + Sync {
     /// List available resources
-    async fn list_resources(&self, cursor: Option<String>) -> Result<(Vec<Resource>, Option<String>), McpError>;
-    
+    async fn list_resources(
+        &self,
+        cursor: Option<String>,
+    ) -> Result<(Vec<Resource>, Option<String>), McpError>;
+
     /// Read resource contents
     async fn read_resource(&self, uri: &str) -> Result<Vec<ResourceContent>, McpError>;
-    
+
     /// List available templates
     async fn list_templates(&self) -> Result<Vec<ResourceTemplate>, McpError>;
-    
+
     /// Check if URI is supported
     async fn supports_uri(&self, uri: &str) -> bool;
-    
+
     /// Validate URI format and access permissions
     async fn validate_uri(&self, uri: &str) -> Result<(), McpError>;
 }
@@ -138,7 +139,10 @@ impl ResourceManager {
         providers.insert(scheme, provider);
     }
 
-    pub async fn list_resources(&self, cursor: Option<String>) -> Result<ListResourcesResponse, McpError> {
+    pub async fn list_resources(
+        &self,
+        cursor: Option<String>,
+    ) -> Result<ListResourcesResponse, McpError> {
         let providers = self.providers.read().await;
         let mut all_resources = Vec::new();
         let mut next_cursor = None;
@@ -159,17 +163,20 @@ impl ResourceManager {
 
     pub async fn read_resource(&self, uri: &str) -> Result<ReadResourceResponse, McpError> {
         let providers = self.providers.read().await;
-        
+
         // Extract scheme from URI
-        let scheme = uri.split("://").next()
+        let scheme = uri
+            .split("://")
+            .next()
             .ok_or_else(|| McpError::InvalidRequest("Invalid URI format".to_string()))?;
-            
-        let provider = providers.get(scheme)
+
+        let provider = providers
+            .get(scheme)
             .ok_or_else(|| McpError::ResourceNotFound(uri.to_string()))?;
 
         // Validate URI before reading
         provider.validate_uri(uri).await?;
-        
+
         let contents = provider.read_resource(uri).await?;
         Ok(ReadResourceResponse { contents })
     }
@@ -225,12 +232,18 @@ impl ResourceManager {
             let notification = JsonRpcNotification {
                 jsonrpc: "2.0".to_string(),
                 method: "notifications/resources/updated".to_string(),
-                params: Some(serde_json::to_value(ResourceUpdatedNotification {
-                    uri: uri.to_string(),
-                }).unwrap()),
+                params: Some(
+                    serde_json::to_value(ResourceUpdatedNotification {
+                        uri: uri.to_string(),
+                    })
+                    .unwrap(),
+                ),
             };
 
-            sender.tx.send(notification).await
+            sender
+                .tx
+                .send(notification)
+                .await
                 .map_err(|e| McpError::InternalError(e.to_string()))?;
         }
         Ok(())
@@ -248,7 +261,10 @@ impl ResourceManager {
                 params: None,
             };
 
-            sender.tx.send(notification).await
+            sender
+                .tx
+                .send(notification)
+                .await
                 .map_err(|e| McpError::InternalError(e.to_string()))?;
         }
         Ok(())
@@ -258,35 +274,85 @@ impl ResourceManager {
 // File System Resource Provider Implementation
 pub struct FileSystemProvider {
     root_path: PathBuf,
-
 }
 
 impl FileSystemProvider {
     pub fn new<P: Into<PathBuf>>(root_path: P) -> Self {
         Self {
             root_path: root_path.into(),
-          
         }
     }
 
     fn sanitize_path(&self, uri: &str) -> Result<PathBuf, McpError> {
-        let path = uri.strip_prefix("file://")
+        let path = uri
+            .strip_prefix("file://")
             .ok_or_else(|| McpError::InvalidRequest("Invalid file URI".to_string()))?;
-            
-        let full_path = self.root_path.join(path);
-        if !full_path.starts_with(&self.root_path) {
-            return Err(McpError::AccessDenied("Path traversal attempt detected".to_string()));
+
+        // If the path starts with the root path, extract the relative part
+        let root_path_str = self.root_path.to_string_lossy();
+        let relative_path = if path.starts_with(&*root_path_str) {
+            path.strip_prefix(&*root_path_str)
+                .unwrap_or(path)
+                .trim_start_matches('/')
+        } else {
+            path.trim_start_matches('/')
+        };
+
+        // Split the path into components and check for traversal attempts
+        let path_components: Vec<&str> = relative_path.split('/').collect();
+        let mut normalized_components = Vec::new();
+
+        for component in path_components {
+            match component {
+                "." => continue,
+                ".." => {
+                    if normalized_components.pop().is_none() {
+                        return Err(McpError::AccessDenied(
+                            "Path traversal attempt detected".to_string(),
+                        ));
+                    }
+                }
+                "" => continue,
+                _ => normalized_components.push(component),
+            }
         }
-        
+
+        // Reconstruct the path
+        let normalized_path = normalized_components.join("/");
+        let full_path = self.root_path.join(normalized_path);
+
+        // Check if the normalized path would be outside the root
+        let root_str = self.root_path.to_string_lossy();
+        let path_str = full_path.to_string_lossy();
+        let root_components: Vec<&str> = root_str.split('/').filter(|s| !s.is_empty()).collect();
+        let path_components: Vec<&str> = path_str.split('/').filter(|s| !s.is_empty()).collect();
+
+        // The path must start with the root components
+        if path_components.len() < root_components.len() {
+            return Err(McpError::AccessDenied(
+                "Path traversal attempt detected".to_string(),
+            ));
+        }
+
+        // Check that the path starts with the root components
+        for (i, root_component) in root_components.iter().enumerate() {
+            if path_components[i] != *root_component {
+                return Err(McpError::AccessDenied(
+                    "Path traversal attempt detected".to_string(),
+                ));
+            }
+        }
+
         Ok(full_path)
     }
 
     fn is_text_content(&self, mime_type: &str, content: &[u8]) -> bool {
         // Check if it's a known text format
-        if mime_type.starts_with("text/") ||
-           mime_type == "application/json" ||
-           mime_type == "application/javascript" ||
-           mime_type == "application/xml" {
+        if mime_type.starts_with("text/")
+            || mime_type == "application/json"
+            || mime_type == "application/javascript"
+            || mime_type == "application/xml"
+        {
             return true;
         }
 
@@ -304,9 +370,8 @@ impl FileSystemProvider {
                 .map(|m| m.to_string())
                 .or_else(|| {
                     // Fallback to basic types based on extension
-                    path.extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|ext| match ext.to_lowercase().as_str() {
+                    path.extension().and_then(|ext| ext.to_str()).map(|ext| {
+                        match ext.to_lowercase().as_str() {
                             "txt" => "text/plain",
                             "json" => "application/json",
                             "js" => "application/javascript",
@@ -317,8 +382,10 @@ impl FileSystemProvider {
                             "jpg" | "jpeg" => "image/jpeg",
                             "gif" => "image/gif",
                             "svg" => "image/svg+xml",
-                            _ => "application/octet-stream"
-                        }.to_string())
+                            _ => "application/octet-stream",
+                        }
+                        .to_string()
+                    })
                 })
         }
     }
@@ -326,21 +393,27 @@ impl FileSystemProvider {
     fn validate_mime_type(&self, mime_type: &str) -> Result<(), McpError> {
         match mime_type.parse::<Mime>() {
             Ok(_) => Ok(()),
-            Err(_) => Err(McpError::InvalidResource("Invalid MIME type format".to_string()))
+            Err(_) => Err(McpError::InvalidResource(
+                "Invalid MIME type format".to_string(),
+            )),
         }
     }
 
     fn validate_access(&self, path: &PathBuf) -> Result<(), McpError> {
         // Check if path exists
         if !path.exists() {
-            return Err(McpError::ResourceNotFound(path.to_string_lossy().to_string()));
+            return Err(McpError::ResourceNotFound(
+                path.to_string_lossy().to_string(),
+            ));
         }
 
         // Check if we have read permission
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
-            let metadata = path.metadata().map_err(|_| McpError::AccessDenied("Cannot read file metadata".to_string()))?;
+            let metadata = path
+                .metadata()
+                .map_err(|_| McpError::AccessDenied("Cannot read file metadata".to_string()))?;
             if metadata.mode() & 0o444 == 0 {
                 return Err(McpError::AccessDenied("No read permission".to_string()));
             }
@@ -349,11 +422,12 @@ impl FileSystemProvider {
         Ok(())
     }
 
-    async fn read_resource(&self, uri: &str) -> Result<Vec<ResourceContent>, McpError> {
+    async fn read_resource_fs(&self, uri: &str) -> Result<Vec<ResourceContent>, McpError> {
         let path = self.sanitize_path(uri)?;
         self.validate_access(&path)?;
 
-        let mime_type = self.get_mime_type(&path)
+        let mime_type = self
+            .get_mime_type(&path)
             .unwrap_or_else(|| "application/octet-stream".to_string());
         self.validate_mime_type(&mime_type)?;
 
@@ -366,7 +440,9 @@ impl FileSystemProvider {
             }]);
         }
 
-        let content = tokio::fs::read(&path).await.map_err(|_| McpError::IoError)?;
+        let content = tokio::fs::read(&path)
+            .await
+            .map_err(|_| McpError::IoError)?;
 
         let resource_content = if self.is_text_content(&mime_type, &content) {
             let text = String::from_utf8(content)
@@ -392,22 +468,26 @@ impl FileSystemProvider {
 
 #[async_trait]
 impl ResourceProvider for FileSystemProvider {
-    async fn list_resources(&self, _cursor: Option<String>) -> Result<(Vec<Resource>, Option<String>), McpError> {
+    async fn list_resources(
+        &self,
+        _cursor: Option<String>,
+    ) -> Result<(Vec<Resource>, Option<String>), McpError> {
         let mut resources = Vec::new();
-        let mut entries = tokio::fs::read_dir(&self.root_path).await.map_err(|_e| McpError::IoError)?;
-        
+        let mut entries = tokio::fs::read_dir(&self.root_path)
+            .await
+            .map_err(|_e| McpError::IoError)?;
+
         while let Some(entry) = entries.next_entry().await.map_err(|_e| McpError::IoError)? {
             let path = entry.path();
-          
+
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 let mime_type = self.get_mime_type(&path);
-                   
-                
+
                 resources.push(Resource {
                     uri: format!("file://{}", path.to_string_lossy()),
                     name: name.to_string(),
                     description: None,
-                    mime_type
+                    mime_type,
                 });
             }
         }
@@ -416,40 +496,12 @@ impl ResourceProvider for FileSystemProvider {
     }
 
     async fn read_resource(&self, uri: &str) -> Result<Vec<ResourceContent>, McpError> {
-        let path = self.sanitize_path(uri)?;
-        
-        if !path.exists() {
-            return Err(McpError::ResourceNotFound(uri.to_string()));
-        }
-
-        let content = tokio::fs::read(&path).await.map_err(|_e| McpError::IoError)?;
-        let mime_type = self.get_mime_type(&path)
-            .unwrap_or_else(|| "application/octet-stream".to_string());
-
-        let resource_content = if self.is_text_content(&mime_type, &content) {
-            let text = String::from_utf8(content)
-                .map_err(|_| McpError::InvalidResource("Invalid UTF-8".to_string()))?;
-            ResourceContent {
-                uri: uri.to_string(),
-                mime_type: Some(mime_type),
-                text: Some(text),
-                blob: None,
-            }
-        } else {
-            ResourceContent {
-                uri: uri.to_string(),
-                mime_type: Some(mime_type),
-                text: None,
-                blob: Some(BASE64.encode(&content)),
-            }
-        };
-
-        Ok(vec![resource_content])
+        self.read_resource_fs(uri).await
     }
 
     async fn list_templates(&self) -> Result<Vec<ResourceTemplate>, McpError> {
         Ok(vec![ResourceTemplate {
-            uri_template: "file:///{path}".to_string(),
+            uri_template: "file://{path}".to_string(),
             name: "Project Files".to_string(),
             description: Some("Access files in the project directory".to_string()),
             mime_type: None,
@@ -479,14 +531,20 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let provider = FileSystemProvider::new(temp_dir.path());
 
+        println!("Root path: {:?}", temp_dir.path());
+
         // Create test JSON file
         let json_path = temp_dir.path().join("test.json");
+        println!("JSON path: {:?}", json_path);
         fs::write(&json_path, r#"{"test": "value"}"#).unwrap();
 
         // Test JSON file reading
         let uri = format!("file://{}", json_path.to_string_lossy());
+        println!("URI: {}", uri);
+
         let contents = provider.read_resource(&uri).await?;
-        
+        println!("Contents: {:?}", contents);
+
         assert_eq!(contents.len(), 1);
         let content = &contents[0];
         assert!(content.text.is_some());
@@ -509,7 +567,7 @@ mod tests {
 
         let uri = format!("file://{}", image_path.to_string_lossy());
         let contents = provider.read_resource(&uri).await?;
-        
+
         assert_eq!(contents.len(), 1);
         let content = &contents[0];
         assert!(content.text.is_none());
@@ -525,14 +583,45 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let provider = FileSystemProvider::new(temp_dir.path());
 
+        println!("Root path: {:?}", temp_dir.path());
         let uri = format!("file://{}", temp_dir.path().to_string_lossy());
+        println!("URI: {}", uri);
+
         let contents = provider.read_resource(&uri).await?;
-        
+        println!("Contents: {:?}", contents);
+
         assert_eq!(contents.len(), 1);
         let content = &contents[0];
         assert!(content.text.is_none());
         assert!(content.blob.is_none());
         assert_eq!(content.mime_type.as_deref(), Some("inode/directory"));
+
+        Ok(())
+    }
+
+    // Add test for text file reads (not directories)
+    #[tokio::test]
+    async fn test_text_file_read() -> Result<(), McpError> {
+        // Create temp directory
+        let temp_dir = TempDir::new().unwrap();
+        let provider = FileSystemProvider::new(temp_dir.path());
+
+        // Create a simple text file
+        let text_path = temp_dir.path().join("test.txt");
+        let test_content = "This is a test text file content";
+        fs::write(&text_path, test_content).unwrap();
+
+        // Test text file reading
+        let uri = format!("file://{}", text_path.to_string_lossy());
+        let contents = provider.read_resource(&uri).await?;
+
+        // Verify the result
+        assert_eq!(contents.len(), 1);
+        let content = &contents[0];
+        assert!(content.text.is_some());
+        assert_eq!(content.text.as_deref(), Some(test_content));
+        assert!(content.blob.is_none());
+        assert_eq!(content.mime_type.as_deref(), Some("text/plain"));
 
         Ok(())
     }

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use tokio::fs;
 
 use crate::{
@@ -44,19 +44,22 @@ impl ToolProvider for WriteFileTool {
 
         Tool {
             name: "write_file".to_string(),
-            description: "Write content to a file. Creates a new file or overwrites existing one.".to_string(),
+            description: "Write content to a file. Creates a new file or overwrites existing one."
+                .to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: schema_properties,
-                required: vec!["operation".to_string(), "path".to_string(), "content".to_string()],
+                required: vec![
+                    "operation".to_string(),
+                    "path".to_string(),
+                    "content".to_string(),
+                ],
             },
         }
     }
 
     async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError> {
-        let path = arguments["path"]
-            .as_str()
-            .ok_or(McpError::InvalidParams)?;
+        let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;
         let content = arguments["content"]
             .as_str()
             .ok_or(McpError::InvalidParams)?;
@@ -67,8 +70,8 @@ impl ToolProvider for WriteFileTool {
             .map_err(|_| McpError::IoError)?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: format!("Successfully wrote {} bytes to {}", content.len(), path) 
+            content: vec![ToolContent::Text {
+                text: format!("Successfully wrote {} bytes to {}", content.len(), path),
             }],
             is_error: false,
         })

@@ -1,7 +1,11 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-use crate::{prompts::Prompt, tools::{Tool, ToolType}};
+use crate::{
+    prompts::{Prompt, PromptCapabilities},
+    resource::ResourceCapabilities,
+    tools::{ToolCapabilities, ToolType},
+};
 
 // Server Configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,6 +20,19 @@ pub struct ServerConfig {
     pub tools: Vec<ToolType>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub prompts: Vec<Prompt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ServerCapabilities>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompts: Option<PromptCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<ToolCapabilities>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -62,7 +79,6 @@ impl Default for SecuritySettings {
     }
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RateLimitSettings {
@@ -88,7 +104,6 @@ impl Default for LoggingSettings {
     }
 }
 
-
 // Add new tool settings struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +121,7 @@ impl Default for ToolSettings {
             enabled: true,
             require_confirmation: true,
             allowed_tools: vec!["*".to_string()], // Allow all tools by default
-            max_execution_time_ms: 30000, // 30 seconds
+            max_execution_time_ms: 30000,         // 30 seconds
             rate_limit: RateLimitSettings {
                 requests_per_minute: 30,
                 burst_size: 5,
@@ -121,6 +136,7 @@ pub enum TransportType {
     Stdio,
     Sse,
     WebSocket,
+    #[cfg(unix)]
     Unix,
 }
 
@@ -130,6 +146,7 @@ impl From<&str> for TransportType {
             "stdio" => TransportType::Stdio,
             "sse" => TransportType::Sse,
             "ws" => TransportType::WebSocket,
+            #[cfg(unix)]
             "unix" => TransportType::Unix,
             _ => TransportType::Stdio,
         }
@@ -180,7 +197,7 @@ impl Default for ServerConfig {
                 enabled: true,
                 require_confirmation: true,
                 allowed_tools: vec!["*".to_string()], // Allow all tools by default
-                max_execution_time_ms: 30000, // 30 seconds
+                max_execution_time_ms: 30000,         // 30 seconds
                 rate_limit: RateLimitSettings {
                     requests_per_minute: 30,
                     burst_size: 5,
@@ -188,6 +205,18 @@ impl Default for ServerConfig {
             },
             tools: vec![],
             prompts: vec![],
+            capabilities: Some(ServerCapabilities {
+                resources: Some(ResourceCapabilities {
+                    list_changed: false,
+                    subscribe: false,
+                }),
+                prompts: Some(PromptCapabilities {
+                    list_changed: false,
+                }),
+                tools: Some(ToolCapabilities {
+                    list_changed: false,
+                }),
+            }),
         }
     }
 }

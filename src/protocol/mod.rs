@@ -3,18 +3,16 @@ mod tests;
 
 use crate::{
     error::McpError,
-    transport::{
-        Transport, TransportChannels, TransportCommand, TransportEvent
-    },
+    transport::{Transport, TransportChannels, TransportCommand, TransportEvent},
 };
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
-use async_trait::async_trait;
-use serde_json::Value;
 
 pub mod types;
-pub use types::*;  // Re-export types
+pub use types::*; // Re-export types
 
 // Constants
 pub const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 60000;
@@ -77,9 +75,10 @@ pub struct Protocol {
     //request_abort_controllers: Arc<RwLock<HashMap<String, tokio::sync::watch::Sender<bool>>>>,
 }
 
-pub type RequestHandlerFn = Box<dyn Fn(JsonRpcRequest, RequestHandlerExtra) -> BoxFuture<Result<serde_json::Value, McpError>>
-    + Send
-    + Sync,
+pub type RequestHandlerFn = Box<
+    dyn Fn(JsonRpcRequest, RequestHandlerExtra) -> BoxFuture<Result<serde_json::Value, McpError>>
+        + Send
+        + Sync,
 >;
 type NotificationHandler =
     Box<dyn Fn(JsonRpcNotification) -> BoxFuture<Result<(), McpError>> + Send + Sync>;
@@ -168,7 +167,7 @@ impl ProtocolHandle {
         if let Err(_) = self.close_tx.send(()).await {
             tracing::warn!("Protocol already closed");
         }
-        
+
         // Send close command to transport
         if let Some(cmd_tx) = &self.inner.cmd_tx {
             let _ = cmd_tx.send(TransportCommand::Close).await;
@@ -188,9 +187,12 @@ impl Protocol {
     }
 
     // Modify connect to return ProtocolHandle
-    pub async fn connect<T: Transport>(&mut self, mut transport: T) -> Result<ProtocolHandle, McpError> {
+    pub async fn connect<T: Transport>(
+        &mut self,
+        mut transport: T,
+    ) -> Result<ProtocolHandle, McpError> {
         let TransportChannels { cmd_tx, event_rx } = transport.start().await?;
-        
+
         self.cmd_tx = Some(cmd_tx.clone());
         self.event_rx = Some(Arc::clone(&event_rx));
 
@@ -224,7 +226,7 @@ impl Protocol {
                                         JsonRpcMessage::Request(req) => {
                                             let handlers = request_handlers.read().await;
                                             if let Some(handler) = handlers.get(&req.method) {
-                                                let (tx, rx) = tokio::sync::watch::channel(false);
+                                                let (_tx, rx) = tokio::sync::watch::channel(false);
                                                 let extra = RequestHandlerExtra { signal: rx };
 
                                                 match handler(req.clone(), extra).await {
@@ -338,7 +340,7 @@ impl Protocol {
         // Only serialize params if Some
         let params_value = if let Some(params) = params {
             let mut value = serde_json::to_value(params).map_err(|_| McpError::InvalidParams)?;
-            
+
             // Add progress token if needed
             if let Some(progress_callback) = options.on_progress {
                 self.progress_handlers
@@ -384,7 +386,9 @@ impl Protocol {
         }
 
         // Setup timeout
-        let timeout = options.timeout.unwrap_or(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MS));
+        let timeout = options
+            .timeout
+            .unwrap_or(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MS));
         let timeout_fut = tokio::time::sleep(timeout);
         tokio::pin!(timeout_fut);
 
@@ -468,24 +472,30 @@ impl Protocol {
     }
 
     // Protected methods that should be implemented by subclasses
-    fn assert_capability_for_method(&self, method: &str) -> Result<(), McpError> {
+    fn assert_capability_for_method(&self, _method: &str) -> Result<(), McpError> {
         // Subclasses should implement this
         Ok(())
     }
 
-    fn assert_notification_capability(&self, method: &str) -> Result<(), McpError> {
+    fn assert_notification_capability(&self, _method: &str) -> Result<(), McpError> {
         // Subclasses should implement this
         Ok(())
     }
 
-    fn assert_request_handler_capability(&self, method: &str) -> Result<(), McpError> {
+    fn assert_request_handler_capability(&self, _method: &str) -> Result<(), McpError> {
         // Subclasses should implement this
         Ok(())
     }
 
-    pub async fn send_notification(&self, notification: JsonRpcNotification) -> Result<(), McpError> {
+    pub async fn send_notification(
+        &self,
+        notification: JsonRpcNotification,
+    ) -> Result<(), McpError> {
         if let Some(cmd_tx) = &self.cmd_tx {
-            cmd_tx.send(TransportCommand::SendMessage(JsonRpcMessage::Notification(notification)))
+            cmd_tx
+                .send(TransportCommand::SendMessage(JsonRpcMessage::Notification(
+                    notification,
+                )))
                 .await
                 .map_err(|_| McpError::ConnectionClosed)?;
             Ok(())
@@ -530,10 +540,14 @@ pub struct ServerCapabilities {
 pub trait RequestHandler: Send + Sync {
     /// Handle an incoming JSON-RPC request
     async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError>;
-    
+
     /// Handle an incoming JSON-RPC notification
-    async fn handle_notification(&self, method: &str, params: Option<Value>) -> Result<(), McpError>;
-    
+    async fn handle_notification(
+        &self,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<(), McpError>;
+
     /// Get the server's capabilities
     fn get_capabilities(&self) -> ServerCapabilities;
 }
@@ -563,14 +577,22 @@ impl BasicRequestHandler {
 
 #[async_trait]
 impl RequestHandler for BasicRequestHandler {
-    async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+    async fn handle_request(
+        &self,
+        method: &str,
+        _params: Option<Value>,
+    ) -> Result<Value, McpError> {
         match method {
             "server_info" => Ok(serde_json::to_value(&self.capabilities)?),
             _ => Err(McpError::MethodNotFound),
         }
     }
 
-    async fn handle_notification(&self, _method: &str, _params: Option<Value>) -> Result<(), McpError> {
+    async fn handle_notification(
+        &self,
+        _method: &str,
+        _params: Option<Value>,
+    ) -> Result<(), McpError> {
         // Basic handler doesn't process any notifications
         Ok(())
     }
@@ -579,4 +601,3 @@ impl RequestHandler for BasicRequestHandler {
         self.capabilities.clone()
     }
 }
-
