@@ -1,5 +1,4 @@
 use std::{env, path::PathBuf};
-use tokio;
 
 use mcp_rs::{
     error::McpError,
@@ -13,7 +12,7 @@ async fn test_resource_loading_integration() -> Result<(), McpError> {
     // Create test server config
     let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = PathBuf::from(root_dir.join("tests/resources/test"));
+    config.resources.root_path = root_dir.join("tests/resources/test");
 
     // Initialize server
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
@@ -30,7 +29,7 @@ async fn test_resource_loading_integration() -> Result<(), McpError> {
     // Test listing resources
     let list_result = server.resource_manager.list_resources(None).await?;
     assert!(
-        list_result.resources.len() > 0,
+        !list_result.resources.is_empty(),
         "Should find test resources"
     );
 
@@ -84,7 +83,7 @@ async fn test_resource_templates() -> Result<(), McpError> {
     // Create test server config
     let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = PathBuf::from(root_dir.join("tests/resources/test"));
+    config.resources.root_path = root_dir.join("tests/resources/test");
     config.resources.enable_templates = true;
 
     // Initialize server
@@ -102,7 +101,7 @@ async fn test_resource_templates() -> Result<(), McpError> {
     // Test listing templates
     let templates = server.resource_manager.list_templates().await?;
     assert!(
-        templates.resource_templates.len() > 0,
+        !templates.resource_templates.is_empty(),
         "Should have default templates"
     );
 
@@ -114,7 +113,7 @@ async fn test_resource_errors() -> Result<(), McpError> {
     // Create test server config
     let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = PathBuf::from(root_dir.join("tests/resources/test"));
+    config.resources.root_path = root_dir.join("tests/resources/test");
 
     // Initialize server
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());

@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
-use tokio;
 
 use mcp_rs::{
     error::McpError,
@@ -44,7 +43,7 @@ impl ToolProvider for MockCalculatorTool {
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
                 properties,
-                required: vec!["operation", "a", "b"]
+                required: ["operation", "a", "b"]
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),

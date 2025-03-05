@@ -3,7 +3,11 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use mime::Mime;
 use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 use crate::{error::McpError, protocol::JsonRpcNotification, NotificationSender};
@@ -399,7 +403,7 @@ impl FileSystemProvider {
         }
     }
 
-    fn validate_access(&self, path: &PathBuf) -> Result<(), McpError> {
+    fn validate_access(&self, path: &Path) -> Result<(), McpError> {
         // Check if path exists
         if !path.exists() {
             return Err(McpError::ResourceNotFound(

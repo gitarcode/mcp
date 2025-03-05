@@ -165,13 +165,13 @@ impl StdioTransport {
         // Writer task
         let writer_handle = tokio::spawn(async move {
             while let Some(msg) = write_rx.recv().await {
-                if let Err(_) = writer.write_all(msg.as_bytes()).await {
+                if (writer.write_all(msg.as_bytes()).await).is_err() {
                     break;
                 }
-                if let Err(_) = writer.write_all(b"\n").await {
+                if (writer.write_all(b"\n").await).is_err() {
                     break;
                 }
-                if let Err(_) = writer.flush().await {
+                if (writer.flush().await).is_err() {
                     break;
                 }
             }

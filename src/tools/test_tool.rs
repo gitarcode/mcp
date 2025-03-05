@@ -6,6 +6,12 @@ use super::{Tool, ToolContent, ToolProvider, ToolResult};
 
 pub struct TestTool;
 
+impl Default for TestTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestTool {
     pub fn new() -> Self {
         TestTool
@@ -44,6 +50,12 @@ impl ToolProvider for TestTool {
 
 pub struct PingTool;
 
+impl Default for PingTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PingTool {
     pub fn new() -> Self {
         PingTool
@@ -75,8 +87,7 @@ impl ToolProvider for PingTool {
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
         let server = arguments
             .get("server")
-            .map(|s| s.as_str())
-            .flatten()
+            .and_then(|s| s.as_str())
             .unwrap_or("localhost");
         let res = reqwest::get(format!("http://{}", server))
             .await

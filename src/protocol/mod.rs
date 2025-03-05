@@ -18,18 +18,10 @@ pub use types::*; // Re-export types
 pub const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 60000;
 
 // Protocol Options
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProtocolOptions {
     /// Whether to enforce strict capability checking
     pub enforce_strict_capabilities: bool,
-}
-
-impl Default for ProtocolOptions {
-    fn default() -> Self {
-        Self {
-            enforce_strict_capabilities: false,
-        }
-    }
 }
 
 // Progress types
@@ -139,7 +131,7 @@ impl ProtocolBuilder {
     }
 
     pub fn build(self) -> Protocol {
-        let protocol = Protocol {
+        Protocol {
             cmd_tx: None,
             event_rx: None,
             options: self.options,
@@ -149,9 +141,7 @@ impl ProtocolBuilder {
             response_handlers: Arc::new(RwLock::new(HashMap::new())),
             progress_handlers: Arc::new(RwLock::new(HashMap::new())),
             //request_abort_controllers: Arc::new(RwLock::new(HashMap::new())),
-        };
-
-        protocol
+        }
     }
 }
 
@@ -164,7 +154,7 @@ pub struct ProtocolHandle {
 impl ProtocolHandle {
     pub async fn close(&self) -> Result<(), McpError> {
         // Send close signal
-        if let Err(_) = self.close_tx.send(()).await {
+        if (self.close_tx.send(()).await).is_err() {
             tracing::warn!("Protocol already closed");
         }
 
@@ -297,20 +287,6 @@ impl Protocol {
             inner: Arc::new(self.clone()),
             close_tx,
         })
-    }
-
-    // Add Clone implementation for Protocol
-    pub fn clone(&self) -> Self {
-        Protocol {
-            cmd_tx: self.cmd_tx.clone(),
-            event_rx: self.event_rx.clone(),
-            options: self.options.clone(),
-            request_message_id: Arc::clone(&self.request_message_id),
-            request_handlers: Arc::clone(&self.request_handlers),
-            notification_handlers: Arc::clone(&self.notification_handlers),
-            response_handlers: Arc::clone(&self.response_handlers),
-            progress_handlers: Arc::clone(&self.progress_handlers),
-        }
     }
 
     pub async fn request<Req, Resp>(
@@ -501,6 +477,21 @@ impl Protocol {
             Ok(())
         } else {
             Err(McpError::NotConnected)
+        }
+    }
+}
+
+impl Clone for Protocol {
+    fn clone(&self) -> Self {
+        Protocol {
+            cmd_tx: self.cmd_tx.clone(),
+            event_rx: self.event_rx.clone(),
+            options: self.options.clone(),
+            request_message_id: Arc::clone(&self.request_message_id),
+            request_handlers: Arc::clone(&self.request_handlers),
+            notification_handlers: Arc::clone(&self.notification_handlers),
+            response_handlers: Arc::clone(&self.response_handlers),
+            progress_handlers: Arc::clone(&self.progress_handlers),
         }
     }
 }

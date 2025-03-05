@@ -21,6 +21,12 @@ pub struct FileSystemTools {
     allowed_directories: Arc<Vec<PathBuf>>,
 }
 
+impl Default for FileSystemTools {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileSystemTools {
     pub fn new() -> Self {
         Self {
@@ -286,7 +292,7 @@ mod tests {
         let (fs_tools, temp_dir) = setup_test_env().await;
 
         // Create test files
-        let files = vec!["multi1.txt", "multi2.txt"];
+        let files = ["multi1.txt", "multi2.txt"];
         for (i, file) in files.iter().enumerate() {
             let path = temp_dir.path().join(file);
             fs_tools
