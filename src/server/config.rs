@@ -12,10 +12,14 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct ServerConfig {
     pub server: ServerSettings,
-    pub resources: ResourceSettings,
-    pub security: SecuritySettings,
-    pub logging: LoggingSettings,
-    pub tool_settings: ToolSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecuritySettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_settings: Option<ToolSettings>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolType>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -173,36 +177,10 @@ impl Default for ServerConfig {
                 max_connections: 100,
                 timeout_ms: 30000,
             },
-            resources: ResourceSettings {
-                root_path: PathBuf::from("./resources"),
-                allowed_schemes: vec!["file".to_string()],
-                max_file_size: 10 * 1024 * 1024, // 10MB
-                enable_templates: true,
-            },
-            security: SecuritySettings {
-                enable_auth: false,
-                token_secret: None,
-                rate_limit: RateLimitSettings {
-                    requests_per_minute: 60,
-                    burst_size: 10,
-                },
-                allowed_origins: vec!["*".to_string()],
-            },
-            logging: LoggingSettings {
-                level: "info".to_string(),
-                file: None,
-                format: LogFormat::Pretty,
-            },
-            tool_settings: ToolSettings {
-                enabled: true,
-                require_confirmation: true,
-                allowed_tools: vec!["*".to_string()], // Allow all tools by default
-                max_execution_time_ms: 30000,         // 30 seconds
-                rate_limit: RateLimitSettings {
-                    requests_per_minute: 30,
-                    burst_size: 5,
-                },
-            },
+            resources: None,
+            security: None,
+            logging: None,
+            tool_settings: None,
             tools: vec![],
             prompts: vec![],
             capabilities: Some(ServerCapabilities {

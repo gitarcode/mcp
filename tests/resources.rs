@@ -4,23 +4,35 @@ use mcp_rs::{
     error::McpError,
     protocol::BasicRequestHandler,
     resource::FileSystemProvider,
-    server::{config::ServerConfig, McpServer},
+    server::{
+        config::{ResourceSettings, ServerConfig},
+        McpServer,
+    },
 };
 
 #[tokio::test]
 async fn test_resource_loading_integration() -> Result<(), McpError> {
-    // Create test server config
-    let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = root_dir.join("tests/resources/test");
+
+    // Create test server config
+    let config = ServerConfig {
+        resources: Some(ResourceSettings {
+            root_path: root_dir.join("tests/resources/test"),
+            allowed_schemes: vec!["file".to_string()],
+            max_file_size: 10 * 1024 * 1024,
+            enable_templates: true,
+        }),
+        ..ServerConfig::default()
+    };
 
     // Initialize server
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
 
     // Register file system provider
-    let fs_provider =
-        std::sync::Arc::new(FileSystemProvider::new(&server.config.resources.root_path));
+    let fs_provider = std::sync::Arc::new(FileSystemProvider::new(
+        &server.config.resources.as_ref().unwrap().root_path,
+    ));
     server
         .resource_manager
         .register_provider("file".to_string(), fs_provider)
@@ -80,19 +92,27 @@ async fn test_resource_loading_integration() -> Result<(), McpError> {
 
 #[tokio::test]
 async fn test_resource_templates() -> Result<(), McpError> {
-    // Create test server config
-    let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = root_dir.join("tests/resources/test");
-    config.resources.enable_templates = true;
+
+    // Create test server config
+    let config = ServerConfig {
+        resources: Some(ResourceSettings {
+            root_path: root_dir.join("tests/resources/test"),
+            allowed_schemes: vec!["file".to_string()],
+            max_file_size: 10 * 1024 * 1024,
+            enable_templates: true,
+        }),
+        ..ServerConfig::default()
+    };
 
     // Initialize server
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
 
     // Register file system provider
-    let fs_provider =
-        std::sync::Arc::new(FileSystemProvider::new(&server.config.resources.root_path));
+    let fs_provider = std::sync::Arc::new(FileSystemProvider::new(
+        &server.config.resources.as_ref().unwrap().root_path,
+    ));
     server
         .resource_manager
         .register_provider("file".to_string(), fs_provider)
@@ -110,18 +130,27 @@ async fn test_resource_templates() -> Result<(), McpError> {
 
 #[tokio::test]
 async fn test_resource_errors() -> Result<(), McpError> {
-    // Create test server config
-    let mut config = ServerConfig::default();
     let root_dir = env::current_dir().unwrap();
-    config.resources.root_path = root_dir.join("tests/resources/test");
+
+    // Create test server config
+    let config = ServerConfig {
+        resources: Some(ResourceSettings {
+            root_path: root_dir.join("tests/resources/test"),
+            allowed_schemes: vec!["file".to_string()],
+            max_file_size: 10 * 1024 * 1024,
+            enable_templates: true,
+        }),
+        ..ServerConfig::default()
+    };
 
     // Initialize server
     let handler = BasicRequestHandler::new("test-server".to_string(), "0.1.0".to_string());
     let server = McpServer::new(config, handler);
 
     // Register file system provider
-    let fs_provider =
-        std::sync::Arc::new(FileSystemProvider::new(&server.config.resources.root_path));
+    let fs_provider = std::sync::Arc::new(FileSystemProvider::new(
+        &server.config.resources.as_ref().unwrap().root_path,
+    ));
     server
         .resource_manager
         .register_provider("file".to_string(), fs_provider)
