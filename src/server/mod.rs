@@ -116,22 +116,26 @@ where
             handler: Arc::new(handler),
             config: config.clone(),
             resource_manager: Arc::new(ResourceManager::new(ResourceCapabilities {
-                subscribe: config.capabilities.as_ref().is_some_and(|c| {
-                    c.resources.as_ref().is_some_and(|r| r.subscribe)
-                }),
-                list_changed: config.capabilities.as_ref().is_some_and(|c| {
-                    c.resources.as_ref().is_some_and(|r| r.list_changed)
-                }),
+                subscribe: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.resources.as_ref().is_some_and(|r| r.subscribe)),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.resources.as_ref().is_some_and(|r| r.list_changed)),
             })),
             tool_manager: Arc::new(ToolManager::new(ToolCapabilities {
-                list_changed: config.capabilities.as_ref().is_some_and(|c| {
-                    c.tools.as_ref().is_some_and(|t| t.list_changed)
-                }),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.tools.as_ref().is_some_and(|t| t.list_changed)),
             })),
             prompt_manager: Arc::new(PromptManager::new(PromptCapabilities {
-                list_changed: config.capabilities.as_ref().is_some_and(|c| {
-                    c.prompts.as_ref().is_some_and(|p| p.list_changed)
-                }),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.prompts.as_ref().is_some_and(|p| p.list_changed)),
             })),
             logging_manager: Arc::new(tokio::sync::Mutex::new(LoggingManager::new())),
             notification_tx,

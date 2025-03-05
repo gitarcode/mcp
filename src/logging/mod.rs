@@ -124,7 +124,8 @@ impl LoggingManager {
                 if message
                     .data
                     .get("message")
-                    .and_then(|m| m.as_str()).is_some_and(|m| {
+                    .and_then(|m| m.as_str())
+                    .is_some_and(|m| {
                         m.contains("Broadcasting SSE message")
                             || m.contains("Failed to broadcast message")
                             || m.contains("-> ")
