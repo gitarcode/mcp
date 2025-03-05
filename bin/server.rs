@@ -1,5 +1,6 @@
 use clap::Parser;
 use mcp_rs::logging::McpSubscriber;
+use mcp_rs::server::config::LoggingSettings;
 use mcp_rs::{
     error::McpError,
     prompts::Prompt,
@@ -62,12 +63,13 @@ async fn main() -> Result<(), McpError> {
                 max_connections: 100,
                 timeout_ms: 30000,
             },
-            resources: ResourceSettings {
+            resources: Some(ResourceSettings {
                 root_path: workspace,
                 allowed_schemes: vec!["file".to_string()],
                 max_file_size: 10 * 1024 * 1024,
                 enable_templates: true,
-            },
+            }),
+            logging: Some(LoggingSettings::default()),
             ..ServerConfig::default()
         }
     };
@@ -87,8 +89,8 @@ async fn main() -> Result<(), McpError> {
         }
     );
 
-    let resources_root_path = config.resources.root_path.clone();
-    let logging_level = config.logging.level.clone();
+    let resources_root_path = config.resources.as_ref().unwrap().root_path.clone();
+    let logging_level = config.logging.as_ref().unwrap().level.clone();
 
     // Create server instance
     let handler =

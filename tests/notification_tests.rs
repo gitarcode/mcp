@@ -32,15 +32,15 @@ async fn setup_test_server(
             max_connections: 10,
             timeout_ms: 1000,
         },
-        resources: ResourceSettings {
+        resources: Some(ResourceSettings {
             root_path: temp_dir.path().to_path_buf(),
             allowed_schemes: vec!["file".to_string()],
             max_file_size: 1024 * 1024,
             enable_templates: true,
-        },
-        security: SecuritySettings::default(),
-        logging: LoggingSettings::default(),
-        tool_settings: ToolSettings::default(),
+        }),
+        security: Some(SecuritySettings::default()),
+        logging: Some(LoggingSettings::default()),
+        tool_settings: Some(ToolSettings::default()),
         tools: vec![],
         prompts: vec![Prompt {
             name: "test-prompt".to_string(),
