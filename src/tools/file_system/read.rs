@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
-use futures::future::{try_join_all, Future};
+use futures::future::try_join_all;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use tokio::fs;
 
 use crate::{
@@ -17,22 +17,25 @@ impl ReadFileTool {
     }
 
     async fn read_single_file(path: &str) -> Result<String, McpError> {
-        fs::read_to_string(path)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to read file {}: {}", path, e);
-                McpError::IoError
-            })
+        fs::read_to_string(path).await.map_err(|e| {
+            tracing::error!("Failed to read file {}: {}", path, e);
+            McpError::IoError
+        })
     }
 
-    async fn read_multiple_files(paths: &[String]) -> Result<Vec<(String, Result<String, McpError>)>, McpError> {
-        let futures: Vec<_> = paths.iter().map(|path| {
-            let path = path.clone();
-            async move {
-                let result = Self::read_single_file(&path).await;
-                Ok((path, result))
-            }
-        }).collect();
+    async fn read_multiple_files(
+        paths: &[String],
+    ) -> Result<Vec<(String, Result<String, McpError>)>, McpError> {
+        let futures: Vec<_> = paths
+            .iter()
+            .map(|path| {
+                let path = path.clone();
+                async move {
+                    let result = Self::read_single_file(&path).await;
+                    Ok((path, result))
+                }
+            })
+            .collect();
 
         try_join_all(futures).await
     }
@@ -70,7 +73,8 @@ impl ToolProvider for ReadFileTool {
         Tool {
             name: "read_file".to_string(),
             description: "Read the complete contents of one or more files from the file system. \
-                Handles various text encodings and provides detailed error messages.".to_string(),
+                Handles various text encodings and provides detailed error messages."
+                .to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: schema_properties,
@@ -84,7 +88,7 @@ impl ToolProvider for ReadFileTool {
             Some("read_file") => {
                 let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;
                 let content = Self::read_single_file(path).await?;
-                
+
                 Ok(ToolResult {
                     content: vec![ToolContent::Text { text: content }],
                     is_error: false,
@@ -103,11 +107,11 @@ impl ToolProvider for ReadFileTool {
 
                 for (path, result) in results {
                     match result {
-                        Ok(content) => contents.push(ToolContent::Text { 
-                            text: format!("File: {}\n{}", path, content) 
+                        Ok(content) => contents.push(ToolContent::Text {
+                            text: format!("File: {}\n{}", path, content),
                         }),
-                        Err(e) => contents.push(ToolContent::Text { 
-                            text: format!("Error reading {}: {}", path, e) 
+                        Err(e) => contents.push(ToolContent::Text {
+                            text: format!("Error reading {}: {}", path, e),
                         }),
                     }
                 }

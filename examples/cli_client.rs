@@ -1,8 +1,5 @@
 use serde_json::json;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    sync::mpsc,
-};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::main]
 async fn main() {

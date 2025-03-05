@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::{
-    prompts::Prompt,
-    tools::{Tool, ToolType},
+    prompts::{Prompt, PromptCapabilities},
+    resource::ResourceCapabilities,
+    tools::{ToolCapabilities, ToolType},
 };
 
 // Server Configuration
@@ -19,6 +20,19 @@ pub struct ServerConfig {
     pub tools: Vec<ToolType>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub prompts: Vec<Prompt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ServerCapabilities>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompts: Option<PromptCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<ToolCapabilities>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -191,6 +205,18 @@ impl Default for ServerConfig {
             },
             tools: vec![],
             prompts: vec![],
+            capabilities: Some(ServerCapabilities {
+                resources: Some(ResourceCapabilities {
+                    list_changed: false,
+                    subscribe: false,
+                }),
+                prompts: Some(PromptCapabilities {
+                    list_changed: false,
+                }),
+                tools: Some(ToolCapabilities {
+                    list_changed: false,
+                }),
+            }),
         }
     }
 }

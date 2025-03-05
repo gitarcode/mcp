@@ -1,22 +1,6 @@
 use async_trait::async_trait;
-use futures::StreamExt;
-use jsonrpc_core::request;
-use reqwest::RequestBuilder;
-use reqwest_eventsource::{Event, EventSource};
-use serde::{Deserialize, Serialize};
-use std::{
-    net::IpAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt},
-    sync::{broadcast, mpsc},
-};
-use warp::Filter;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use crate::{
     error::McpError,

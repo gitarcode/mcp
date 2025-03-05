@@ -2,11 +2,10 @@ use clap::{Parser, Subcommand};
 use mcp_rs::{
     client::{Client, ClientInfo},
     error::McpError,
-    transport::stdio::StdioTransport,
     transport::sse::SseTransport,
+    transport::stdio::StdioTransport,
 };
 use serde_json::json;
-use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "mcp-client", version, about = "MCP Client CLI")]
@@ -16,7 +15,7 @@ struct Cli {
     server: Option<String>,
 
     /// Transport type (stdio, sse)
-    #[arg(short, long, default_value = "stdio")]  // Changed default to stdio
+    #[arg(short, long, default_value = "stdio")] // Changed default to stdio
     transport: String,
 
     #[command(subcommand)]
@@ -79,8 +78,7 @@ async fn main() -> Result<(), McpError> {
     let args = Cli::parse();
 
     // Set up logging
-    tracing_subscriber::fmt()
-        .init();
+    tracing_subscriber::fmt().init();
 
     // Create and initialize client
     let mut client = Client::new();
@@ -97,14 +95,20 @@ async fn main() -> Result<(), McpError> {
                     return Err(e);
                 }
             }
-    
+
             tracing::info!("Initializing client...");
-            match client.initialize(ClientInfo {
-                name: "mcp-cli".to_string(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-            }).await {
+            match client
+                .initialize(ClientInfo {
+                    name: "mcp-cli".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                })
+                .await
+            {
                 Ok(result) => {
-                    tracing::info!("Successfully initialized. Server info: {:?}", result.server_info);
+                    tracing::info!(
+                        "Successfully initialized. Server info: {:?}",
+                        result.server_info
+                    );
                 }
                 Err(e) => {
                     tracing::error!("Failed to initialize: {}", e);
@@ -118,11 +122,9 @@ async fn main() -> Result<(), McpError> {
             let url = url::Url::parse(&server_url).unwrap();
             let host = url.host_str().unwrap_or("127.0.0.1").to_string();
             let port = url.port().unwrap_or(3000);
-            
+
             let transport = SseTransport::new_client(host, port, 32);
             client.connect(transport).await?;
-
-
         }
         _ => {
             return Err(McpError::InvalidRequest(
@@ -133,13 +135,15 @@ async fn main() -> Result<(), McpError> {
 
     // Initialize with better error handling and debugging
     tracing::debug!("Sending initialize request...");
-    let init_result = match tokio::time::timeout(
+    let _init_result = match tokio::time::timeout(
         std::time::Duration::from_secs(30), // Increased from 5 to 30 seconds
         client.initialize(ClientInfo {
             name: "mcp-cli".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
-        })
-    ).await {
+        }),
+    )
+    .await
+    {
         Ok(Ok(result)) => {
             tracing::info!("Connected to server: {:?}", result.server_info);
             result
@@ -155,7 +159,7 @@ async fn main() -> Result<(), McpError> {
     };
 
     // Execute command
-    let result = match args.command {
+    let _result = match args.command {
         Commands::ListResources { cursor } => {
             let res = client.list_resources(cursor).await?;
             println!("{}", json!(res));
@@ -176,14 +180,14 @@ async fn main() -> Result<(), McpError> {
         }
 
         Commands::GetPrompt { name, args } => {
-            let arguments =
-                if let Some(args_str) = args {
-                    Some(serde_json::from_str(&args_str).map_err(|e| {
-                        McpError::InvalidRequest(e.to_string())
-                    })?)
-                } else {
-                    None
-                };
+            let arguments = if let Some(args_str) = args {
+                Some(
+                    serde_json::from_str(&args_str)
+                        .map_err(|e| McpError::InvalidRequest(e.to_string()))?,
+                )
+            } else {
+                None
+            };
             let res = client.get_prompt(name, arguments).await?;
             println!("{}", json!(res));
         }
@@ -194,8 +198,8 @@ async fn main() -> Result<(), McpError> {
         }
 
         Commands::CallTool { name, args } => {
-            let arguments = serde_json::from_str(&args)
-                .map_err(|e| McpError::InvalidRequest(e.to_string()))?;
+            let arguments =
+                serde_json::from_str(&args).map_err(|e| McpError::InvalidRequest(e.to_string()))?;
             let res = client.call_tool(name, arguments).await?;
             println!("{}", json!(res));
         }

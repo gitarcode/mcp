@@ -207,7 +207,7 @@ async fn main() -> Result<(), McpError> {
         #[cfg(unix)]
         TransportType::Unix => {
             tracing::info!("Starting server with UNIX transport");
-            server.run_unix_transport().await;
+            let _ = server.run_unix_transport().await;
         }
         TransportType::Sse => {
             tracing::info!("Starting server with SSE transport");

@@ -1,23 +1,16 @@
+use async_trait::async_trait;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixListener, UnixStream},
     sync::mpsc,
-    time::{timeout, Duration},
 };
-use async_trait::async_trait;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 
+use super::{JsonRpcMessage, Transport, TransportChannels, TransportCommand, TransportEvent};
 use crate::error::McpError;
-use super::{
-    Transport,
-    TransportChannels,
-    TransportCommand,
-    TransportEvent,
-    JsonRpcMessage,
-};
 
 pub struct UnixTransport {
     path: PathBuf,
@@ -64,7 +57,9 @@ impl UnixTransport {
                     writer.write_all(b"\n").await?;
                     writer.flush().await?;
                     Ok::<_, std::io::Error>(())
-                }.await {
+                }
+                .await
+                {
                     tracing::error!("Write error: {:?}", e);
                     break;
                 }
@@ -82,20 +77,30 @@ impl UnixTransport {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             let trimmed = line.trim();
-                            if !trimmed.contains("notifications/message") && !trimmed.contains("list_changed") {
+                            if !trimmed.contains("notifications/message")
+                                && !trimmed.contains("list_changed")
+                            {
                                 tracing::debug!("<- {}", trimmed);
                             }
 
                             if !trimmed.is_empty() {
                                 match serde_json::from_str::<JsonRpcMessage>(trimmed) {
                                     Ok(msg) => {
-                                        if event_tx.send(TransportEvent::Message(msg)).await.is_err() {
+                                        if event_tx
+                                            .send(TransportEvent::Message(msg))
+                                            .await
+                                            .is_err()
+                                        {
                                             break;
                                         }
                                     }
                                     Err(e) => {
                                         tracing::error!("Parse error: {}, input: {}", e, trimmed);
-                                        if event_tx.send(TransportEvent::Error(McpError::ParseError)).await.is_err() {
+                                        if event_tx
+                                            .send(TransportEvent::Error(McpError::ParseError))
+                                            .await
+                                            .is_err()
+                                        {
                                             break;
                                         }
                                     }
@@ -104,7 +109,9 @@ impl UnixTransport {
                         }
                         Err(e) => {
                             tracing::error!("Read error: {:?}", e);
-                            let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                            let _ = event_tx
+                                .send(TransportEvent::Error(McpError::IoError))
+                                .await;
                             break;
                         }
                     }
@@ -116,16 +123,14 @@ impl UnixTransport {
         let mut cmd_rx = cmd_rx;
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
-                TransportCommand::SendMessage(msg) => {
-                    match serde_json::to_string(&msg) {
-                        Ok(s) => {
-                            if write_tx.send(s).await.is_err() {
-                                break;
-                            }
+                TransportCommand::SendMessage(msg) => match serde_json::to_string(&msg) {
+                    Ok(s) => {
+                        if write_tx.send(s).await.is_err() {
+                            break;
                         }
-                        Err(e) => tracing::error!("Failed to serialize message: {:?}", e),
                     }
-                }
+                    Err(e) => tracing::error!("Failed to serialize message: {:?}", e),
+                },
                 TransportCommand::Close => {
                     // Just break the loop - write_tx will be dropped after the loop
                     break;
@@ -134,7 +139,7 @@ impl UnixTransport {
         }
 
         // Cleanup
-        drop(write_tx);  // This ensures pending messages are sent before closing
+        drop(write_tx); // This ensures pending messages are sent before closing
         let _ = reader_handle.await;
         let _ = writer_handle.await;
         let _ = event_tx.send(TransportEvent::Closed).await;
@@ -146,13 +151,15 @@ impl UnixTransport {
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
         tracing::info!("Server task started for socket path: {:?}", path);
-        
+
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             tracing::info!("Creating parent directory: {:?}", parent);
             if let Err(e) = fs::create_dir_all(parent) {
                 tracing::error!("Failed to create parent directory: {}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::IoError))
+                    .await;
                 return;
             }
         }
@@ -162,7 +169,9 @@ impl UnixTransport {
             tracing::info!("Removing existing socket file");
             if let Err(e) = std::fs::remove_file(&path) {
                 tracing::error!("Failed to remove existing socket: {}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::IoError))
+                    .await;
                 return;
             }
         }
@@ -173,10 +182,12 @@ impl UnixTransport {
             Ok(l) => {
                 tracing::info!("Successfully bound to socket");
                 l
-            },
+            }
             Err(e) => {
                 tracing::error!("Failed to bind Unix socket: {}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::IoError))
+                    .await;
                 return;
             }
         };
@@ -184,7 +195,9 @@ impl UnixTransport {
         // Verify socket file exists after binding
         if !path.exists() {
             tracing::error!("Socket file does not exist after binding!");
-            let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+            let _ = event_tx
+                .send(TransportEvent::Error(McpError::IoError))
+                .await;
             return;
         }
 
@@ -192,7 +205,9 @@ impl UnixTransport {
         tracing::info!("Setting socket permissions to 0o660");
         if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o660)) {
             tracing::error!("Failed to set socket permissions: {}", e);
-            let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+            let _ = event_tx
+                .send(TransportEvent::Error(McpError::IoError))
+                .await;
             return;
         }
 
@@ -204,7 +219,9 @@ impl UnixTransport {
             }
             Err(e) => {
                 tracing::error!("Failed to accept connection: {}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::IoError))
+                    .await;
             }
         }
 
@@ -226,7 +243,9 @@ impl UnixTransport {
             }
             Err(e) => {
                 tracing::error!("Failed to connect to Unix socket: {:?}", e);
-                let _ = event_tx.send(TransportEvent::Error(McpError::IoError)).await;
+                let _ = event_tx
+                    .send(TransportEvent::Error(McpError::IoError))
+                    .await;
             }
         }
     }
@@ -235,24 +254,19 @@ impl UnixTransport {
 #[async_trait]
 impl Transport for UnixTransport {
     async fn start(&mut self) -> Result<TransportChannels, McpError> {
-        tracing::info!("Transport start called, server_mode: {}, path: {:?}", 
-            self.server_mode, self.path);
-        
+        tracing::info!(
+            "Transport start called, server_mode: {}, path: {:?}",
+            self.server_mode,
+            self.path
+        );
+
         let (cmd_tx, cmd_rx) = mpsc::channel(self.buffer_size);
         let (event_tx, event_rx) = mpsc::channel(self.buffer_size);
 
         if self.server_mode {
-            tokio::spawn(Self::run_server(
-                self.path.clone(),
-                cmd_rx,
-                event_tx,
-            ));
+            tokio::spawn(Self::run_server(self.path.clone(), cmd_rx, event_tx));
         } else {
-            tokio::spawn(Self::run_client(
-                self.path.clone(),
-                cmd_rx,
-                event_tx,
-            ));
+            tokio::spawn(Self::run_client(self.path.clone(), cmd_rx, event_tx));
         }
 
         let event_rx = Arc::new(tokio::sync::Mutex::new(event_rx));
@@ -277,17 +291,17 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(5), async {
             tracing::info!("Starting test");
             let socket_path = PathBuf::from("/tmp/mcp-test/test_socket");
-            
+
             tracing::info!("Creating transports");
             let mut server = UnixTransport::new_server(socket_path.clone(), Some(4092));
             let mut client = UnixTransport::new_client(socket_path.clone(), Some(4092));
 
             tracing::info!("Starting server");
             let server_channels = server.start().await?;
-            
+
             tracing::info!("Waiting before starting client");
             sleep(Duration::from_millis(100)).await;
-            
+
             tracing::info!("Starting client");
             let client_channels = client.start().await?;
 
@@ -300,7 +314,11 @@ mod tests {
             });
 
             // Client sends request
-            client_channels.cmd_tx.send(TransportCommand::SendMessage(test_request)).await.unwrap();
+            client_channels
+                .cmd_tx
+                .send(TransportCommand::SendMessage(test_request))
+                .await
+                .unwrap();
 
             // Server should receive the request
             let mut server_event_rx = server_channels.event_rx.lock().await;
@@ -314,8 +332,12 @@ mod tests {
                             result: Some(serde_json::json!("test response")),
                             error: None,
                         });
-                        server_channels.cmd_tx.send(TransportCommand::SendMessage(response)).await.unwrap();
-                    },
+                        server_channels
+                            .cmd_tx
+                            .send(TransportCommand::SendMessage(response))
+                            .await
+                            .unwrap();
+                    }
                     _ => panic!("Expected request message"),
                 }
             }
@@ -327,14 +349,22 @@ mod tests {
                     JsonRpcMessage::Response(resp) => {
                         assert_eq!(resp.id, 1);
                         assert_eq!(resp.result, Some(serde_json::json!("test response")));
-                    },
+                    }
                     _ => panic!("Expected response message"),
                 }
             }
 
             // Clean up
-            client_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
-            server_channels.cmd_tx.send(TransportCommand::Close).await.unwrap();
+            client_channels
+                .cmd_tx
+                .send(TransportCommand::Close)
+                .await
+                .unwrap();
+            server_channels
+                .cmd_tx
+                .send(TransportCommand::Close)
+                .await
+                .unwrap();
 
             // Wait for cleanup
             sleep(Duration::from_millis(100)).await;
@@ -347,4 +377,4 @@ mod tests {
         .await
         .map_err(|_| McpError::ShutdownTimeout)?
     }
-} 
+}

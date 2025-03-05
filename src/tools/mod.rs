@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use test_tool::{PingTool, TestTool};
 use std::{collections::HashMap, sync::Arc};
+use test_tool::{PingTool, TestTool};
 use tokio::sync::RwLock;
 
 pub mod calculator;
@@ -58,9 +58,7 @@ pub enum ToolContent {
     #[serde(rename = "image")]
     Image { data: String, mime_type: String },
     #[serde(rename = "resource")]
-    Resource {
-        resource: ResourceContent,
-    },
+    Resource { resource: ResourceContent },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +103,7 @@ pub struct CallToolRequest {
 pub trait ToolProvider: Send + Sync {
     /// Get tool definition
     async fn get_tool(&self) -> Tool;
-    
+
     /// Execute tool
     async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError>;
 }
@@ -139,7 +137,7 @@ impl ToolManager {
     pub async fn list_tools(&self, _cursor: Option<String>) -> Result<ListToolsResponse, McpError> {
         let tools = self.tools.read().await;
         let mut tool_list = Vec::new();
-        
+
         for provider in tools.values() {
             tool_list.push(provider.get_tool().await);
         }
@@ -152,9 +150,10 @@ impl ToolManager {
 
     pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<ToolResult, McpError> {
         let tools = self.tools.read().await;
-        let provider = tools.get(name)
+        let provider = tools
+            .get(name)
             .ok_or_else(|| McpError::InvalidRequest(format!("Unknown tool: {}", name)))?;
-            
+
         provider.execute(arguments).await
     }
 }

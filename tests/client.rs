@@ -13,7 +13,8 @@ async fn test_sse_client() {
 
     // Send a test request using regular HTTP client
     let client = Client::new();
-    let response = client.post("http://127.0.0.1:3000/rpc")
+    let response = client
+        .post("http://127.0.0.1:3000/rpc")
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
