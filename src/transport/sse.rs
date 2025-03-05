@@ -118,10 +118,8 @@ impl SseTransport {
                             {
                                 if let Some(params) = &n.params {
                                     // Check the log message and logger
-                                    let is_debug = params
-                                        .get("level")
-                                        .and_then(|l| l.as_str())
-                                        .map_or(false, |l| l == "debug");
+                                    let is_debug = params.get("level").and_then(|l| l.as_str())
+                                        == Some("debug");
 
                                     let logger =
                                         params.get("logger").and_then(|l| l.as_str()).unwrap_or("");

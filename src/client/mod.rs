@@ -88,6 +88,12 @@ pub struct Client {
     server_capabilities: Arc<RwLock<Option<ServerCapabilities>>>,
 }
 
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Client {
     pub fn new() -> Self {
         Self {
@@ -432,7 +438,7 @@ mod tests {
             let server_task = tokio::spawn(async move {
                 let mut buf = String::new();
                 let mut reader = BufReader::new(output_rx);
-                if let Ok(_) = reader.read_line(&mut buf).await {
+                if (reader.read_line(&mut buf).await).is_ok() {
                     let ack = r#"{"jsonrpc":"2.0","method":"shutdown/ack","params":null}"#;
                     let _ = input_tx.write_all(ack.as_bytes()).await;
                     let _ = input_tx.write_all(b"\n").await;

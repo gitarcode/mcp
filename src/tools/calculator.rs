@@ -147,6 +147,12 @@ pub struct CalculatorTool {
     service: Arc<CalculatorService>,
 }
 
+impl Default for CalculatorTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CalculatorTool {
     pub fn new() -> Self {
         Self {
@@ -219,6 +225,48 @@ impl ToolProvider for CalculatorTool {
                 is_error: true,
             }),
         }
+    }
+}
+
+pub struct CalculatorHandler {
+    calculator: CalculatorService,
+}
+
+#[async_trait]
+impl RequestHandler for CalculatorHandler {
+    async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
+        match method {
+            "calculate" => {
+                let params: CalculatorParams =
+                    serde_json::from_value(params.ok_or(McpError::InvalidParams)?)?;
+                let result = self.calculator.calculate(&params)?;
+                Ok(json!({"result": result}))
+            }
+            _ => Err(McpError::MethodNotFound),
+        }
+    }
+
+    async fn handle_notification(
+        &self,
+        _method: &str,
+        _params: Option<Value>,
+    ) -> Result<(), McpError> {
+        Ok(()) // Calculator doesn't handle any notifications
+    }
+
+    fn get_capabilities(&self) -> ServerCapabilities {
+        ServerCapabilities {
+            name: "Calculator".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            protocol_version: "1.0".to_string(),
+            capabilities: vec!["calculate".to_string()],
+        }
+    }
+}
+
+impl From<CalculatorError> for McpError {
+    fn from(err: CalculatorError) -> Self {
+        McpError::ToolExecutionError(err.to_string())
     }
 }
 
@@ -311,47 +359,5 @@ mod tests {
             }
             _ => panic!("Expected text content"),
         }
-    }
-}
-
-pub struct CalculatorHandler {
-    calculator: CalculatorService,
-}
-
-#[async_trait]
-impl RequestHandler for CalculatorHandler {
-    async fn handle_request(&self, method: &str, params: Option<Value>) -> Result<Value, McpError> {
-        match method {
-            "calculate" => {
-                let params: CalculatorParams =
-                    serde_json::from_value(params.ok_or(McpError::InvalidParams)?)?;
-                let result = self.calculator.calculate(&params)?;
-                Ok(json!({"result": result}))
-            }
-            _ => Err(McpError::MethodNotFound),
-        }
-    }
-
-    async fn handle_notification(
-        &self,
-        _method: &str,
-        _params: Option<Value>,
-    ) -> Result<(), McpError> {
-        Ok(()) // Calculator doesn't handle any notifications
-    }
-
-    fn get_capabilities(&self) -> ServerCapabilities {
-        ServerCapabilities {
-            name: "Calculator".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            protocol_version: "1.0".to_string(),
-            capabilities: vec!["calculate".to_string()],
-        }
-    }
-}
-
-impl From<CalculatorError> for McpError {
-    fn from(err: CalculatorError) -> Self {
-        McpError::ToolExecutionError(err.to_string())
     }
 }

@@ -75,6 +75,12 @@ pub struct LoggingManager {
     capabilities: LoggingCapabilities,
 }
 
+impl Default for LoggingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoggingManager {
     pub fn new() -> Self {
         Self {
@@ -119,7 +125,7 @@ impl LoggingManager {
                     .data
                     .get("message")
                     .and_then(|m| m.as_str())
-                    .map_or(false, |m| {
+                    .is_some_and(|m| {
                         m.contains("Broadcasting SSE message")
                             || m.contains("Failed to broadcast message")
                             || m.contains("-> ")

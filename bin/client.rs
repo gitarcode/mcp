@@ -159,7 +159,7 @@ async fn main() -> Result<(), McpError> {
     };
 
     // Execute command
-    let _result = match args.command {
+    match args.command {
         Commands::ListResources { cursor } => {
             let res = client.list_resources(cursor).await?;
             println!("{}", json!(res));
@@ -170,8 +170,8 @@ async fn main() -> Result<(), McpError> {
             println!("{}", json!(res));
         }
         Commands::Subscribe { uri } => {
-            let res = client.subscribe_to_resource(uri).await?;
-            println!("{}", json!(res));
+            client.subscribe_to_resource(uri).await?;
+            println!("{}", json!(()));
         }
 
         Commands::ListPrompts { cursor } => {

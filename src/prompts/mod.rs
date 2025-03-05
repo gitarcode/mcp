@@ -132,7 +132,7 @@ impl PromptManager {
         // Validate required arguments
         if let Some(args) = &arguments {
             for arg in prompt.arguments.iter().filter(|a| a.required) {
-                if !args.get(&arg.name).is_some() {
+                if args.get(&arg.name).is_none() {
                     return Err(McpError::InvalidRequest(format!(
                         "Missing required argument: {}",
                         arg.name

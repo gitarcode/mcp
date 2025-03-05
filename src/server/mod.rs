@@ -116,22 +116,26 @@ where
             handler: Arc::new(handler),
             config: config.clone(),
             resource_manager: Arc::new(ResourceManager::new(ResourceCapabilities {
-                subscribe: config.capabilities.as_ref().map_or(false, |c| {
-                    c.resources.as_ref().map_or(false, |r| r.subscribe)
-                }),
-                list_changed: config.capabilities.as_ref().map_or(false, |c| {
-                    c.resources.as_ref().map_or(false, |r| r.list_changed)
-                }),
+                subscribe: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.resources.as_ref().is_some_and(|r| r.subscribe)),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.resources.as_ref().is_some_and(|r| r.list_changed)),
             })),
             tool_manager: Arc::new(ToolManager::new(ToolCapabilities {
-                list_changed: config.capabilities.as_ref().map_or(false, |c| {
-                    c.tools.as_ref().map_or(false, |t| t.list_changed)
-                }),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.tools.as_ref().is_some_and(|t| t.list_changed)),
             })),
             prompt_manager: Arc::new(PromptManager::new(PromptCapabilities {
-                list_changed: config.capabilities.as_ref().map_or(false, |c| {
-                    c.prompts.as_ref().map_or(false, |p| p.list_changed)
-                }),
+                list_changed: config
+                    .capabilities
+                    .as_ref()
+                    .is_some_and(|c| c.prompts.as_ref().is_some_and(|p| p.list_changed)),
             })),
             logging_manager: Arc::new(tokio::sync::Mutex::new(LoggingManager::new())),
             notification_tx,
@@ -251,7 +255,7 @@ where
                 Box::pin(async move {
                     let params: ListResourcesRequest = req
                         .params
-                        .map(|params| serde_json::from_value(params))
+                        .map(serde_json::from_value)
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
@@ -291,7 +295,7 @@ where
                 Box::pin(async move {
                     let params: ListToolsRequest = req
                         .params
-                        .map(|params| serde_json::from_value(params))
+                        .map(serde_json::from_value)
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
@@ -323,7 +327,7 @@ where
                 Box::pin(async move {
                     let params: ListPromptsRequest = req
                         .params
-                        .map(|params| serde_json::from_value(params))
+                        .map(serde_json::from_value)
                         .transpose()
                         .map_err(|_| McpError::InvalidParams)?
                         .unwrap_or_default();
@@ -507,7 +511,7 @@ mod tests {
         sleep(Duration::from_millis(100)).await;
 
         // Use the state we cloned earlier instead of trying to get it from server_handle
-        let (state_tx, _): &(watch::Sender<ServerState>, watch::Receiver<ServerState>) = &*state;
+        let (state_tx, _): &(watch::Sender<ServerState>, watch::Receiver<ServerState>) = &state;
 
         // Trigger shutdown
         state_tx.send(ServerState::ShuttingDown).unwrap();
@@ -568,7 +572,7 @@ mod tests {
         }
 
         // Use cloned state
-        let (state_tx, _): &(watch::Sender<ServerState>, watch::Receiver<ServerState>) = &*state;
+        let (state_tx, _): &(watch::Sender<ServerState>, watch::Receiver<ServerState>) = &state;
         state_tx.send(ServerState::ShuttingDown).unwrap();
 
         // Verify clean shutdown
