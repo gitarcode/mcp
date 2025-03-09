@@ -43,6 +43,9 @@ pub mod stdio;
 // SSE Transport Implementation
 pub mod sse;
 
+// WebSocket Transport Implementation
+pub mod ws;
+
 // Unix Domain Socket Transport Implementation
 #[cfg(unix)]
 pub mod unix;
