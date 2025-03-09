@@ -17,7 +17,11 @@ thiserror = "2"
 tracing = "0.1"
 tokio-util = "0.7"
 jsonrpc-core = "18"
-warp = "0.3"
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower = "0.5"
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
 jsonrpc-derive = "18"
 futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
@@ -34,6 +38,7 @@ mime = "0.3"
 tokio-tungstenite = "0.26"
 tracing-core = "0.1"
 async-recursion = "1"
+rand = "0.9"
 
 [[bin]]
 name = "server"

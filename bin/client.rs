@@ -4,17 +4,18 @@ use mcp_rs::{
     error::McpError,
     transport::sse::SseTransport,
     transport::stdio::StdioTransport,
+    transport::ws::WebSocketTransport,
 };
 use serde_json::json;
 
 #[derive(Parser, Debug)]
 #[command(name = "mcp-client", version, about = "MCP Client CLI")]
 struct Cli {
-    /// Server URL for SSE transport
+    /// Server URL for SSE or WebSocket transport
     #[arg(short, long)]
     server: Option<String>,
 
-    /// Transport type (stdio, sse)
+    /// Transport type (stdio, sse, ws)
     #[arg(short, long, default_value = "stdio")] // Changed default to stdio
     transport: String,
 
@@ -105,10 +106,8 @@ async fn main() -> Result<(), McpError> {
                 .await
             {
                 Ok(result) => {
-                    tracing::info!(
-                        "Successfully initialized. Server info: {:?}",
-                        result.server_info
-                    );
+                    tracing::info!("Server info: {:?}", result.server_info);
+                    tracing::info!("Server capabilities: {:?}", result.capabilities);
                 }
                 Err(e) => {
                     tracing::error!("Failed to initialize: {}", e);
@@ -117,19 +116,102 @@ async fn main() -> Result<(), McpError> {
             }
         }
         "sse" => {
-            let server_url = args.server.unwrap_or("http://127.0.0.1".to_string());
+            let server_url = args.server.as_ref().ok_or_else(|| {
+                McpError::InvalidRequest("Server URL is required for SSE transport".to_string())
+            })?;
+            
             // Parse server URL to get host and port
-            let url = url::Url::parse(&server_url).unwrap();
-            let host = url.host_str().unwrap_or("127.0.0.1").to_string();
-            let port = url.port().unwrap_or(3000);
+            let url_parts: Vec<&str> = server_url.split(':').collect();
+            if url_parts.len() != 2 {
+                return Err(McpError::InvalidRequest(
+                    "Server URL must be in format host:port for SSE transport".to_string(),
+                ));
+            }
+            
+            let host = url_parts[0].to_string();
+            let port = url_parts[1].parse::<u16>().map_err(|_| {
+                McpError::InvalidRequest("Invalid port number".to_string())
+            })?;
+            
+            tracing::info!("Connecting to {}:{} using SSE transport...", host, port);
+            let transport = SseTransport::new_client(host.clone(), port, 1024);
+            match client.connect(transport).await {
+                Ok(_) => tracing::info!("Successfully connected to server"),
+                Err(e) => {
+                    tracing::error!("Failed to connect: {}", e);
+                    return Err(e);
+                }
+            }
 
-            let transport = SseTransport::new_client(host, port, 32);
-            client.connect(transport).await?;
+            tracing::info!("Initializing client...");
+            match client
+                .initialize(ClientInfo {
+                    name: "mcp-cli".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                })
+                .await
+            {
+                Ok(result) => {
+                    tracing::info!("Server info: {:?}", result.server_info);
+                    tracing::info!("Server capabilities: {:?}", result.capabilities);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        "ws" => {
+            let server_url = args.server.as_ref().ok_or_else(|| {
+                McpError::InvalidRequest("Server URL is required for WebSocket transport".to_string())
+            })?;
+            
+            let host_port: Vec<&str> = server_url.split(':').collect();
+            if host_port.len() != 2 {
+                return Err(McpError::InvalidRequest(
+                    "Server URL must be in format host:port for WebSocket transport".to_string(),
+                ));
+            }
+            
+            let host = host_port[0].to_string();
+            let port = host_port[1].parse::<u16>().map_err(|_| {
+                McpError::InvalidRequest("Invalid port number".to_string())
+            })?;
+            
+            tracing::info!("Connecting to {}:{} using WebSocket transport with 'mcp' subprotocol...", host, port);
+            let transport = WebSocketTransport::new_client(host.clone(), port, 1024);
+            
+            match client.connect(transport).await {
+                Ok(_) => tracing::info!("Successfully connected to server"),
+                Err(e) => {
+                    tracing::error!("Failed to connect: {}", e);
+                    return Err(e);
+                }
+            }
+
+            tracing::info!("Initializing client...");
+            match client
+                .initialize(ClientInfo {
+                    name: "mcp-cli".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                })
+                .await
+            {
+                Ok(result) => {
+                    tracing::info!("Server info: {:?}", result.server_info);
+                    tracing::info!("Server capabilities: {:?}", result.capabilities);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize: {}", e);
+                    return Err(e);
+                }
+            }
         }
         _ => {
-            return Err(McpError::InvalidRequest(
-                "Invalid transport type".to_string(),
-            ))
+            return Err(McpError::InvalidRequest(format!(
+                "Unsupported transport type: {}",
+                args.transport
+            )));
         }
     }
 

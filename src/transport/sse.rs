@@ -1,6 +1,6 @@
 use reqwest_eventsource::{Event, EventSource};
 use std::{
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -8,7 +8,13 @@ use std::{
     time::Duration,
 };
 use tokio::sync::mpsc;
-use warp::Filter;
+use axum::{
+    extract::State,
+    response::{sse::{Event as AxumSseEvent, Sse}, IntoResponse},
+    routing::get,
+    Router,
+};
+use tower_http::cors::CorsLayer;
 
 use super::{JsonRpcMessage, Transport, TransportChannels, TransportCommand, TransportEvent};
 use crate::error::McpError;
@@ -16,6 +22,7 @@ use crate::error::McpError;
 use async_trait::async_trait;
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,83 +65,30 @@ impl SseTransport {
         // Create broadcast channel for SSE clients
         let (broadcast_tx, _) = tokio::sync::broadcast::channel::<JsonRpcMessage>(100);
         let broadcast_tx = Arc::new(broadcast_tx);
-        let broadcast_tx2 = Arc::clone(&broadcast_tx);
+        let broadcast_tx_clone = Arc::clone(&broadcast_tx);
 
         // Client counter for unique IDs
         let client_counter = Arc::new(AtomicU64::new(0));
         let host_clone = host.clone();
 
-        // SSE endpoint route
-        let sse_route = warp::path("sse").and(warp::get()).map(move || {
-            let client_id = client_counter.fetch_add(1, Ordering::SeqCst);
-            let broadcast_rx = broadcast_tx.subscribe();
-            let endpoint = format!("http://{}:{}/message/{}", host.clone(), port, client_id);
-
-            warp::sse::reply(
-                warp::sse::keep_alive()
-                    .interval(Duration::from_secs(30))
-                    .stream(async_stream::stream! {
-                        yield Ok::<_, warp::Error>(warp::sse::Event::default()
-                            .event("endpoint")
-                            .data(endpoint));
-
-                        let mut broadcast_rx = broadcast_rx;
-                        while let Ok(msg) = broadcast_rx.recv().await {
-                            yield Ok::<_, warp::Error>(warp::sse::Event::default()
-                                .event("message")
-                                .json_data(&msg)
-                                .unwrap());
-                        }
-                    }),
-            )
-        });
-
-        // Message receiving route
-        let message_route = warp::path!("message" / u64)
-            .and(warp::post())
-            .and(warp::body::json())
-            .map(move |_client_id: u64, message: JsonRpcMessage| {
-                let event_tx = event_tx.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = event_tx.send(TransportEvent::Message(message)).await {
-                        tracing::error!("Failed to forward message: {:?}", e);
-                    }
-                });
-                warp::reply()
-            });
-
-        // Combine routes
-        let routes = sse_route.or(message_route);
-
         // Message forwarding task
-        tokio::spawn(async move {
+        let message_task = tokio::spawn(async move {
             while let Some(cmd) = cmd_rx.recv().await {
                 match cmd {
                     TransportCommand::SendMessage(msg) => {
-                        // Skip broadcasting debug log messages about SSE and internal operations
+                        // Skip broadcasting debug log messages
                         let should_skip = match &msg {
                             JsonRpcMessage::Notification(n)
                                 if n.method == "notifications/message" =>
                             {
                                 if let Some(params) = &n.params {
-                                    // Check the log message and logger
                                     let is_debug = params.get("level").and_then(|l| l.as_str())
                                         == Some("debug");
 
                                     let logger =
                                         params.get("logger").and_then(|l| l.as_str()).unwrap_or("");
 
-                                    let message = params
-                                        .get("data")
-                                        .and_then(|d| d.get("message"))
-                                        .and_then(|m| m.as_str())
-                                        .unwrap_or("");
-
-                                    is_debug
-                                        && (logger.starts_with("hyper::")
-                                            || logger.starts_with("mcp_rs::transport")
-                                            || message.contains("Broadcasting SSE message")
-                                            || message.contains("Failed to broadcast message"))
+                                    is_debug && logger.starts_with("mcp_rs::transport")
                                 } else {
                                     false
                                 }
@@ -144,20 +98,91 @@ impl SseTransport {
 
                         if !should_skip {
                             tracing::debug!("Broadcasting SSE message: {:?}", msg);
-                            if let Err(e) = broadcast_tx2.send(msg) {
-                                tracing::error!("Failed to broadcast message: {:?}", e);
+                            let receiver_count = broadcast_tx_clone.send(msg).unwrap_or(0);
+                            if receiver_count == 0 {
+                                tracing::debug!("No SSE clients connected to receive message");
                             }
                         }
                     }
-                    TransportCommand::Close => break,
+                    TransportCommand::Close => {
+                        tracing::info!("Closing SSE server message task");
+                        break;
+                    }
                 }
             }
         });
 
-        // Start the server
-        warp::serve(routes)
-            .run((host_clone.parse::<IpAddr>().unwrap(), port))
-            .await;
+        // SSE handler function
+        async fn sse_handler(
+            State((client_counter, broadcast_tx, host, port)): State<(
+                Arc<AtomicU64>,
+                Arc<tokio::sync::broadcast::Sender<JsonRpcMessage>>,
+                String,
+                u16,
+            )>,
+        ) -> impl IntoResponse {
+            let client_id = client_counter.fetch_add(1, Ordering::SeqCst);
+            let broadcast_rx = broadcast_tx.subscribe();
+            let endpoint = format!("http://{}:{}/message/{}", host, port, client_id);
+
+            // Send initial endpoint information
+            let stream = async_stream::stream! {
+                // Send endpoint information first
+                yield Ok::<_, Infallible>(
+                    AxumSseEvent::default()
+                        .event("endpoint")
+                        .data(serde_json::to_string(&EndpointEvent { endpoint }).unwrap())
+                );
+
+                // Stream messages from broadcast channel
+                let mut rx = broadcast_rx;
+                while let Ok(msg) = rx.recv().await {
+                    let json = serde_json::to_string(&msg).unwrap();
+                    yield Ok::<_, Infallible>(
+                        AxumSseEvent::default()
+                            .event("message")
+                            .data(json)
+                    );
+                }
+            };
+
+            Sse::new(stream).keep_alive(
+                axum::response::sse::KeepAlive::new()
+                    .interval(Duration::from_secs(30))
+                    .text("ping")
+            )
+        }
+
+        // Create the Axum app with routes
+        let event_tx_clone = event_tx.clone();
+        let app = Router::new()
+            .route("/sse", get(sse_handler))
+            .route("/message/:client_id", axum::routing::post(|| async { "OK" }))
+            .layer(CorsLayer::permissive())
+            .with_state((client_counter, broadcast_tx, host_clone, port))
+            .with_state(event_tx_clone);
+
+        // Parse the host address
+        let host_addr: IpAddr = host
+            .parse()
+            .unwrap_or_else(|_| "127.0.0.1".parse().unwrap());
+        let socket_addr = SocketAddr::from((host_addr, port));
+
+        tracing::info!("Starting SSE server at http://{}:{}/sse", host, port);
+
+        // Start the Axum server
+        let listener = tokio::net::TcpListener::bind(socket_addr).await.unwrap();
+        let server = axum::serve(listener, app);
+
+        tokio::select! {
+            _ = server => {
+                tracing::info!("SSE server stopped");
+            }
+        }
+
+        // Clean up
+        message_task.abort();
+        tracing::info!("SSE server shut down");
     }
 
     async fn run_client(
@@ -275,3 +300,4 @@ impl Transport for SseTransport {
         Ok(TransportChannels { cmd_tx, event_rx })
     }
 }
+

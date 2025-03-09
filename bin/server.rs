@@ -11,6 +11,7 @@ use mcp_rs::{
         McpServer,
     },
     tools::calculator::CalculatorTool,
+    transport::{ws::WebSocketTransport, Transport},
 };
 use std::{path::PathBuf, sync::Arc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -227,11 +228,20 @@ async fn main() -> Result<(), McpError> {
             }
         }
         TransportType::WebSocket => {
-            tracing::info!("Starting server with WebSocket transport");
+            let host = server.config.server.host.clone();
+            let port = server.config.server.port;
+            let _max_connections = server.config.server.max_connections;
 
+            // The WebSocketTransport now uses Axum instead of Warp
+            tracing::info!("Starting WebSocket transport on {}:{}", host, port);
+            
+            // Create a WebSocketTransport and start it
+            let mut transport = WebSocketTransport::new_server(host, port, 1024);
+            let transport_channels = transport.start().await?;
+            
             // Run server and wait for shutdown
             tokio::select! {
-                result = server.run_websocket_transport() => {
+                result = server.run(transport_channels) => {
                     if let Err(e) = result {
                         tracing::error!("Server error: {}", e);
                     }
