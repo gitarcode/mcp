@@ -227,7 +227,19 @@ async fn main() -> Result<(), McpError> {
             }
         }
         TransportType::WebSocket => {
-            unimplemented!("WebSocket transport not implemented");
+            tracing::info!("Starting server with WebSocket transport");
+
+            // Run server and wait for shutdown
+            tokio::select! {
+                result = server.run_websocket_transport() => {
+                    if let Err(e) = result {
+                        tracing::error!("Server error: {}", e);
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    tracing::info!("Shutting down server...");
+                }
+            }
         }
     }
 

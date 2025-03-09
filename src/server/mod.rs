@@ -15,7 +15,7 @@ use crate::{
     protocol::{JsonRpcNotification, Protocol, ProtocolOptions, RequestHandler},
     resource::{ListResourcesRequest, ReadResourceRequest, ResourceCapabilities, ResourceManager},
     tools::{CallToolRequest, ListToolsRequest},
-    transport::{sse::SseTransport, stdio::StdioTransport, Transport},
+    transport::{sse::SseTransport, stdio::StdioTransport, ws::WebSocketTransport, Transport},
 };
 use tokio::sync::mpsc;
 
@@ -161,6 +161,15 @@ where
 
     pub async fn run_sse_transport(&mut self) -> Result<(), McpError> {
         let transport = SseTransport::new_server(
+            self.config.server.host.clone(),
+            self.config.server.port,
+            1024, // Buffer size
+        );
+        self.run_transport(transport).await
+    }
+
+    pub async fn run_websocket_transport(&mut self) -> Result<(), McpError> {
+        let transport = WebSocketTransport::new_server(
             self.config.server.host.clone(),
             self.config.server.port,
             1024, // Buffer size
