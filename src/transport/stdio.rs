@@ -1,49 +1,137 @@
 use async_trait::async_trait;
+use std::process::Stdio;
 use std::sync::Arc;
+use tokio::process::Command;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     sync::mpsc,
 };
-
-#[cfg(test)]
-use tokio::io::{self, AsyncRead, AsyncWrite, BufReader};
 
 use super::{JsonRpcMessage, Transport, TransportChannels, TransportCommand, TransportEvent};
 use crate::error::McpError;
 
 pub struct StdioTransport {
     buffer_size: usize,
-    #[cfg(test)]
-    reader: Box<dyn AsyncRead + Unpin + Send + Sync>,
-    #[cfg(test)]
-    writer: Box<dyn AsyncWrite + Unpin + Send + Sync>,
+    reader: Option<Box<dyn AsyncRead + Unpin + Send + Sync>>,
+    writer: Option<Box<dyn AsyncWrite + Unpin + Send + Sync>>,
 }
 
 impl StdioTransport {
     pub fn new(buffer_size: Option<usize>) -> Self {
         Self {
             buffer_size: buffer_size.unwrap_or(4092),
-            #[cfg(test)]
-            reader: Box::new(io::empty()),
-            #[cfg(test)]
-            writer: Box::new(io::sink()),
+            reader: None,
+            writer: None,
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_streams(
+    /// Create a new StdioTransport with custom streams
+    ///
+    /// This allows connecting the transport to arbitrary async streams
+    /// instead of the default stdin/stdout, which is useful for connecting
+    /// to child processes or other I/O sources.
+    pub fn with_streams(
         reader: BufReader<impl AsyncRead + Unpin + Send + Sync + 'static>,
         writer: impl AsyncWrite + Unpin + Send + Sync + 'static,
         buffer_size: Option<usize>,
     ) -> Self {
         Self {
-            reader: Box::new(reader),
-            writer: Box::new(writer),
+            reader: Some(Box::new(reader)),
+            writer: Some(Box::new(writer)),
             buffer_size: buffer_size.unwrap_or(4092),
         }
     }
 
-    #[cfg(not(test))]
+    /// Creates a new StdioTransport connected to a child process
+    ///
+    /// This spawns a new process with the provided command and arguments,
+    /// and connects the transport to its stdin and stdout.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use tokio::runtime::Runtime;
+    /// # use crate::transport::stdio::StdioTransport;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let rt = Runtime::new()?;
+    /// # rt.block_on(async {
+    /// let mut transport = StdioTransport::from_process("program", &["arg1", "arg2"]).await?;
+    /// let channels = transport.start().await?;
+    /// # Ok(())
+    /// # })
+    /// # }
+    /// ```
+    pub async fn from_process(
+        program: &str,
+        args: &[&str],
+        buffer_size: Option<usize>,
+    ) -> Result<Self, McpError> {
+        let mut child = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|_| McpError::IoError)?;
+
+        let stdin = child.stdin.take().ok_or(McpError::IoError)?;
+        let stdout = child.stdout.take().ok_or(McpError::IoError)?;
+
+        // Spawn a task to manage the child process
+        tokio::spawn(async move {
+            let status = child.wait().await;
+            if let Err(e) = status {
+                tracing::error!("Child process error: {:?}", e);
+            }
+        });
+
+        let reader = BufReader::new(stdout);
+        Ok(Self::with_streams(reader, stdin, buffer_size))
+    }
+
+    /// Creates a new StdioTransport from raw stdin and stdout handles
+    ///
+    /// This is useful when you already have handles to stdin and stdout,
+    /// such as when you've spawned a process using the standard library.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::process::{Command, Stdio};
+    /// # use tokio::runtime::Runtime;
+    /// # use crate::transport::stdio::StdioTransport;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let rt = Runtime::new()?;
+    /// # rt.block_on(async {
+    /// let mut child = Command::new("program")
+    ///     .args(&["arg1", "arg2"])
+    ///     .stdin(Stdio::piped())
+    ///     .stdout(Stdio::piped())
+    ///     .spawn()?;
+    ///
+    /// let stdin = child.stdin.take().unwrap();
+    /// let stdout = child.stdout.take().unwrap();
+    ///
+    /// let mut transport = StdioTransport::from_raw_pipes(stdin, stdout, None).await?;
+    /// let channels = transport.start().await?;
+    /// # Ok(())
+    /// # })
+    /// # }
+    /// ```
+    pub async fn from_raw_pipes<R, W>(
+        stdin: W,
+        stdout: R,
+        buffer_size: Option<usize>,
+    ) -> Result<Self, McpError>
+    where
+        R: AsyncRead + Unpin + Send + Sync + 'static,
+        W: AsyncWrite + Unpin + Send + Sync + 'static,
+    {
+        let reader = BufReader::new(stdout);
+        Ok(Self::with_streams(reader, stdin, buffer_size))
+    }
+
     async fn run(
         reader: tokio::io::BufReader<tokio::io::Stdin>,
         writer: tokio::io::Stdout,
@@ -153,8 +241,7 @@ impl StdioTransport {
         let _ = event_tx.send(TransportEvent::Closed).await;
     }
 
-    #[cfg(test)]
-    async fn run_test(
+    async fn run_with_custom_streams(
         reader: Box<dyn AsyncRead + Unpin + Send + Sync>,
         mut writer: Box<dyn AsyncWrite + Unpin + Send + Sync>,
         mut cmd_rx: mpsc::Receiver<TransportCommand>,
@@ -165,6 +252,10 @@ impl StdioTransport {
         // Writer task
         let writer_handle = tokio::spawn(async move {
             while let Some(msg) = write_rx.recv().await {
+                if !msg.contains("notifications/message") && !msg.contains("list_changed") {
+                    tracing::debug!("-> {}", msg);
+                }
+
                 if (writer.write_all(msg.as_bytes()).await).is_err() {
                     break;
                 }
@@ -188,10 +279,28 @@ impl StdioTransport {
                         break;
                     }
                     let trimmed = line.trim();
+                    if !trimmed.contains("notifications/message")
+                        && !trimmed.contains("list_changed")
+                    {
+                        tracing::debug!("<- {}", trimmed);
+                    }
+
                     if !trimmed.is_empty() {
-                        if let Ok(msg) = serde_json::from_str::<JsonRpcMessage>(trimmed) {
-                            if event_tx.send(TransportEvent::Message(msg)).await.is_err() {
-                                break;
+                        match serde_json::from_str::<JsonRpcMessage>(trimmed) {
+                            Ok(msg) => {
+                                if event_tx.send(TransportEvent::Message(msg)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Parse error: {}, input: {}", e, trimmed);
+                                if event_tx
+                                    .send(TransportEvent::Error(McpError::ParseError))
+                                    .await
+                                    .is_err()
+                                {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -228,16 +337,12 @@ impl Transport for StdioTransport {
         let (cmd_tx, cmd_rx) = mpsc::channel(self.buffer_size);
         let (event_tx, event_rx) = mpsc::channel(self.buffer_size);
 
-        #[cfg(test)]
-        {
-            // Use the test streams
-            let reader = std::mem::replace(&mut self.reader, Box::new(io::empty()));
-            let writer = std::mem::replace(&mut self.writer, Box::new(io::sink()));
-            tokio::spawn(Self::run_test(reader, writer, cmd_rx, event_tx));
-        }
-
-        #[cfg(not(test))]
-        {
+        if let (Some(reader), Some(writer)) = (self.reader.take(), self.writer.take()) {
+            // Use custom streams
+            tokio::spawn(Self::run_with_custom_streams(
+                reader, writer, cmd_rx, event_tx,
+            ));
+        } else {
             // Set up buffered stdin/stdout
             let stdin = tokio::io::stdin();
             let stdout = tokio::io::stdout();
@@ -255,7 +360,7 @@ mod tests {
     use super::*;
     use crate::transport::TransportCommand;
     use std::time::Duration;
-    use tokio::io::{self, BufReader};
+    use tokio::io::{self};
 
     #[tokio::test]
     async fn test_stdio_transport() -> Result<(), McpError> {
