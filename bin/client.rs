@@ -4,6 +4,7 @@ use mcp_rs::{
     error::McpError,
     transport::sse::SseTransport,
     transport::stdio::StdioTransport,
+    transport::ws::WebSocketTransport,
 };
 use serde_json::json;
 
@@ -14,8 +15,12 @@ struct Cli {
     #[arg(short, long)]
     server: Option<String>,
 
-    /// Transport type (stdio, sse)
-    #[arg(short, long, default_value = "stdio")] // Changed default to stdio
+    /// Authorization header for WebSocket connections
+    #[arg(long)]
+    auth_header: Option<String>,
+
+    /// Transport type (stdio, sse, ws, wss)
+    #[arg(short, long, default_value = "stdio")]
     transport: String,
 
     #[command(subcommand)]
@@ -117,13 +122,47 @@ async fn main() -> Result<(), McpError> {
             }
         }
         "sse" => {
-            let server_url = args.server.unwrap_or("http://127.0.0.1".to_string());
+            let server_url = args
+                .server
+                .unwrap_or_else(|| "http://127.0.0.1".to_string());
             // Parse server URL to get host and port
             let url = url::Url::parse(&server_url).unwrap();
             let host = url.host_str().unwrap_or("127.0.0.1").to_string();
             let port = url.port().unwrap_or(3000);
 
             let transport = SseTransport::new_client(host, port, 32);
+            client.connect(transport).await?;
+        }
+        "ws" => {
+            let server_url = args
+                .server
+                .unwrap_or_else(|| "ws://127.0.0.1:3000".to_string());
+            // Parse server URL to get host and port
+            let url = url::Url::parse(&server_url).unwrap();
+            let host = url.host_str().unwrap_or("127.0.0.1").to_string();
+            let port = url.port().unwrap_or(3000);
+
+            let mut transport = WebSocketTransport::new_client(host, port, 32);
+
+            // Add auth header if provided
+            if let Some(auth) = args.auth_header {
+                transport = transport.with_auth_header(auth);
+            }
+
+            client.connect(transport).await?;
+        }
+        "wss" => {
+            let server_url = args
+                .server
+                .unwrap_or_else(|| "wss://127.0.0.1:3000".to_string());
+            let url = url::Url::parse(&server_url).unwrap();
+            let host = url.host_str().unwrap_or("127.0.0.1").to_string();
+            let port = url.port().unwrap_or(3000);
+
+            let mut transport = WebSocketTransport::new_wss_client(host, port, 32);
+            if let Some(auth) = args.auth_header {
+                transport = transport.with_auth_header(auth);
+            }
             client.connect(transport).await?;
         }
         _ => {
@@ -208,7 +247,7 @@ async fn main() -> Result<(), McpError> {
     };
 
     // Remove the Ctrl+C wait for stdio transport
-    if args.transport == "sse" {
+    if args.transport == "sse" || args.transport == "ws" || args.transport == "wss" {
         tracing::info!("Client connected. Press Ctrl+C to exit...");
         tokio::signal::ctrl_c().await?;
     }

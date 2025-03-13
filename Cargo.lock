@@ -1130,6 +1130,7 @@ dependencies = [
  "clap",
  "config",
  "futures",
+ "http 1.2.0",
  "jsonrpc-core",
  "jsonrpc-derive",
  "mime",
