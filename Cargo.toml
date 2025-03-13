@@ -35,6 +35,7 @@ mime = "0.3"
 tokio-tungstenite = "0.26"
 tracing-core = "0.1"
 async-recursion = "1"
+http = "1.1"
 
 [[bin]]
 name = "server"

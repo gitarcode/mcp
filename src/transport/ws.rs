@@ -1,3 +1,4 @@
+use http;
 use std::{
     net::IpAddr,
     sync::{
@@ -25,7 +26,9 @@ pub struct WebSocketTransport {
     host: String,
     port: u16,
     client_mode: bool,
+    use_tls: bool,
     buffer_size: usize,
+    auth_header: Option<String>,
 }
 
 impl WebSocketTransport {
@@ -34,7 +37,9 @@ impl WebSocketTransport {
             host,
             port,
             client_mode: false,
+            use_tls: false,
             buffer_size,
+            auth_header: None,
         }
     }
 
@@ -43,8 +48,26 @@ impl WebSocketTransport {
             host,
             port,
             client_mode: true,
+            use_tls: false,
             buffer_size,
+            auth_header: None,
         }
+    }
+
+    pub fn new_wss_client(host: String, port: u16, buffer_size: usize) -> Self {
+        Self {
+            host,
+            port,
+            client_mode: true,
+            use_tls: true,
+            buffer_size,
+            auth_header: None,
+        }
+    }
+
+    pub fn with_auth_header(mut self, auth_header: String) -> Self {
+        self.auth_header = Some(auth_header);
+        self
     }
 
     async fn run_server(
@@ -273,14 +296,59 @@ impl WebSocketTransport {
     async fn run_client(
         host: String,
         port: u16,
+        use_tls: bool,
+        auth_header: Option<String>,
         mut cmd_rx: mpsc::Receiver<TransportCommand>,
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
-        let ws_url = format!("ws://{}:{}/ws", host, port);
+        let protocol = if use_tls { "wss" } else { "ws" };
+        let ws_url = format!("{}://{}:{}/ws", protocol, host, port);
         tracing::debug!("Connecting to WebSocket endpoint: {}", ws_url);
 
         // Connect to the WebSocket server
-        let ws_stream = match connect_async(&ws_url).await {
+        let ws_stream_result = if let Some(auth) = &auth_header {
+            // Create a custom connector with auth header
+            let request = http::Request::builder()
+                .uri(&ws_url)
+                .header("User-Agent", "mcp-rs-client")
+                .header("Authorization", auth)
+                .header("Connection", "Upgrade")
+                .header("Upgrade", "websocket")
+                .header("Host", format!("{}:{}", host, port))
+                .header("Sec-WebSocket-Version", "13")
+                .header(
+                    "Sec-WebSocket-Key",
+                    tokio_tungstenite::tungstenite::handshake::client::generate_key(),
+                )
+                .body(())
+                .map_err(|e| {
+                    tracing::error!("Failed to build WebSocket request: {:?}", e);
+                    // Create a properly formatted error response
+                    let response = http::Response::builder()
+                        .status(http::StatusCode::BAD_REQUEST)
+                        .body(None)
+                        .unwrap();
+                    TungsteniteError::Http(response)
+                });
+
+            if let Ok(request) = request {
+                tracing::debug!("Added Authorization header to WebSocket request");
+                connect_async(request).await
+            } else {
+                // Create a properly formatted error response
+                let response = http::Response::builder()
+                    .status(http::StatusCode::BAD_REQUEST)
+                    .body(None)
+                    .unwrap();
+                Err(TungsteniteError::Http(response))
+            }
+        } else {
+            // Use standard connection without auth
+            connect_async(&ws_url).await
+        };
+
+        // Connect to the WebSocket server
+        let ws_stream = match ws_stream_result {
             Ok((stream, response)) => {
                 tracing::debug!("Connected to WebSocket server: {:?}", response);
                 stream
@@ -442,6 +510,8 @@ impl Transport for WebSocketTransport {
             tokio::spawn(Self::run_client(
                 self.host.clone(),
                 self.port,
+                self.use_tls,
+                self.auth_header.clone(),
                 cmd_rx,
                 event_tx,
             ));
@@ -690,6 +760,128 @@ mod tests {
             }
         } else {
             panic!("No echo message received by client");
+        }
+
+        // Close the transport
+        cmd_tx.send(TransportCommand::Close).await.unwrap();
+
+        // Wait for cleanup
+        sleep(Duration::from_millis(100)).await;
+
+        // Abort the server
+        server_handle.abort();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_websocket_transport_with_auth() -> Result<(), McpError> {
+        // Initialize tracing for tests
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("debug")
+            .try_init();
+
+        // Start a WebSocket server using warp for the client to connect to
+        let host = "127.0.0.1".to_string();
+        let port = PORT_COUNTER.fetch_add(1, AtomicOrdering::SeqCst); // Unique port to avoid conflicts
+
+        // Create a channel to receive messages from the test server
+        let (server_tx, mut server_rx) = mpsc::channel::<JsonRpcMessage>(32);
+        let (auth_tx, mut auth_rx) = mpsc::channel::<String>(1);
+
+        // Create a WebSocket server that checks for auth headers
+        let ws_route = warp::path("ws")
+            .and(warp::ws())
+            .and(warp::header::optional::<String>("authorization"))
+            .map(move |ws: warp::ws::Ws, auth_header: Option<String>| {
+                let server_tx = server_tx.clone();
+                let auth_tx = auth_tx.clone();
+
+                // Send the auth header to our test channel
+                if let Some(auth) = auth_header.clone() {
+                    let auth_tx_clone = auth_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = auth_tx_clone.send(auth).await;
+                    });
+                }
+
+                ws.on_upgrade(move |websocket| async move {
+                    let (mut tx, mut rx) = websocket.split();
+
+                    // Forward incoming messages to the server_rx channel
+                    while let Some(Ok(msg)) = rx.next().await {
+                        if msg.is_text() {
+                            if let Ok(text) = msg.to_str() {
+                                if let Ok(json_msg) = serde_json::from_str::<JsonRpcMessage>(text) {
+                                    // Echo the message back
+                                    let echo_text = serde_json::to_string(&json_msg).unwrap();
+                                    let _ = tx.send(WarpMessage::text(echo_text)).await;
+
+                                    // Also send to our test channel
+                                    let _ = server_tx.send(json_msg).await;
+                                }
+                            }
+                        }
+                    }
+                })
+            });
+
+        // Start the test server
+        let server_handle =
+            tokio::spawn(warp::serve(ws_route).run((host.parse::<IpAddr>().unwrap(), port)));
+
+        // Give the server time to start
+        sleep(Duration::from_millis(100)).await;
+
+        // Create and start the WebSocket client transport with auth header
+        let auth_header = "Bearer test-token-123".to_string();
+        let mut transport = WebSocketTransport::new_client(host.clone(), port, 32)
+            .with_auth_header(auth_header.clone());
+
+        let TransportChannels {
+            cmd_tx,
+            event_rx: _,
+        } = transport.start().await?;
+
+        // Give the client time to connect
+        sleep(Duration::from_millis(100)).await;
+
+        // Check if the server received the auth header
+        if let Some(received_auth) = auth_rx.recv().await {
+            assert_eq!(received_auth, auth_header, "Auth header mismatch");
+        } else {
+            panic!("No auth header received by server");
+        }
+
+        // Create a test message
+        let request_id = 54321;
+        let test_request = JsonRpcMessage::Request(JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: request_id,
+            method: "test.auth.method".to_string(),
+            params: None,
+        });
+
+        // Send the message from client to server
+        cmd_tx
+            .send(TransportCommand::SendMessage(test_request.clone()))
+            .await
+            .unwrap();
+
+        // Wait for the server to process the message
+        sleep(Duration::from_millis(100)).await;
+
+        // Check if the server received the message
+        if let Some(received) = server_rx.recv().await {
+            match received {
+                JsonRpcMessage::Request(req) => {
+                    assert_eq!(req.id, request_id);
+                    assert_eq!(req.method, "test.auth.method");
+                }
+                _ => panic!("Expected Request message"),
+            }
+        } else {
+            panic!("No message received by server");
         }
 
         // Close the transport
