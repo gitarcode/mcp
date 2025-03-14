@@ -3,13 +3,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use test_tool::{PingTool, TestTool};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 
 pub mod calculator;
 pub mod file_system;
 pub mod test_tool;
 
 use crate::error::McpError;
+use crate::protocol::JsonRpcNotification;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -115,15 +116,44 @@ pub struct ToolCapabilities {
     pub list_changed: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolUpdateNotification {
+    pub tool_name: String,
+    pub update_type: ToolUpdateType,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolUpdateType {
+    Added,
+    Updated,
+    Removed,
+}
+
 pub struct ToolManager {
     pub tools: Arc<RwLock<HashMap<String, Arc<dyn ToolProvider>>>>,
     pub capabilities: ToolCapabilities,
+    notification_tx: Option<mpsc::Sender<JsonRpcNotification>>,
 }
 
 impl ToolManager {
     pub fn new(capabilities: ToolCapabilities) -> Self {
         Self {
             tools: Arc::new(RwLock::new(HashMap::new())),
+            notification_tx: None,
+            capabilities,
+        }
+    }
+
+    pub fn with_notification_sender(
+        capabilities: ToolCapabilities,
+        notification_tx: mpsc::Sender<JsonRpcNotification>,
+    ) -> Self {
+        Self {
+            tools: Arc::new(RwLock::new(HashMap::new())),
+            notification_tx: Some(notification_tx),
             capabilities,
         }
     }
@@ -131,7 +161,88 @@ impl ToolManager {
     pub async fn register_tool(&self, provider: Arc<dyn ToolProvider>) {
         let tool = provider.get_tool().await;
         let mut tools = self.tools.write().await;
-        tools.insert(tool.name, provider);
+        tools.insert(tool.name.clone(), provider);
+
+        // Send notification if tool updates are enabled
+        if self.capabilities.list_changed {
+            self.send_tool_update_notification(
+                &tool.name,
+                ToolUpdateType::Added,
+                Some(format!("Tool '{}' registered", tool.name)),
+            )
+            .await;
+        }
+    }
+
+    pub async fn unregister_tool(&self, name: &str) -> Result<(), McpError> {
+        let mut tools = self.tools.write().await;
+        if tools.remove(name).is_some() {
+            // Send notification if tool updates are enabled
+            if self.capabilities.list_changed {
+                self.send_tool_update_notification(
+                    name,
+                    ToolUpdateType::Removed,
+                    Some(format!("Tool '{}' unregistered", name)),
+                )
+                .await;
+            }
+            Ok(())
+        } else {
+            Err(McpError::InvalidRequest(format!(
+                "Tool '{}' not found",
+                name
+            )))
+        }
+    }
+
+    pub async fn update_tool(&self, provider: Arc<dyn ToolProvider>) -> Result<(), McpError> {
+        let tool = provider.get_tool().await;
+        let mut tools = self.tools.write().await;
+
+        if tools.contains_key(&tool.name) {
+            tools.insert(tool.name.clone(), provider);
+
+            // Send notification if tool updates are enabled
+            if self.capabilities.list_changed {
+                self.send_tool_update_notification(
+                    &tool.name,
+                    ToolUpdateType::Updated,
+                    Some(format!("Tool '{}' updated", tool.name)),
+                )
+                .await;
+            }
+            Ok(())
+        } else {
+            Err(McpError::InvalidRequest(format!(
+                "Tool '{}' not found",
+                tool.name
+            )))
+        }
+    }
+
+    async fn send_tool_update_notification(
+        &self,
+        tool_name: &str,
+        update_type: ToolUpdateType,
+        details: Option<String>,
+    ) {
+        if let Some(tx) = &self.notification_tx {
+            let notification = ToolUpdateNotification {
+                tool_name: tool_name.to_string(),
+                update_type,
+                details,
+            };
+
+            let json_notification = JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "tools/update".to_string(),
+                params: Some(serde_json::to_value(notification).unwrap_or_default()),
+            };
+
+            if let Err(e) = tx.send(json_notification).await {
+                tracing::error!("Failed to send tool update notification: {}", e);
+            }
+        }
     }
 
     pub async fn list_tools(&self, _cursor: Option<String>) -> Result<ListToolsResponse, McpError> {
