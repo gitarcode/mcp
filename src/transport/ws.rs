@@ -537,12 +537,7 @@ impl Transport for WebSocketTransport {
                 ));
             }
             WsTransportConfig::Server { host, port } => {
-                tokio::spawn(Self::run_server(
-                    host.clone(),
-                    port.clone(),
-                    cmd_rx,
-                    event_tx,
-                ));
+                tokio::spawn(Self::run_server(host.clone(), *port, cmd_rx, event_tx));
             }
         }
 
