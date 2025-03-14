@@ -98,7 +98,7 @@ where
     pub prompt_manager: Arc<PromptManager>,
     pub logging_manager: Arc<tokio::sync::Mutex<LoggingManager>>,
     notification_tx: mpsc::Sender<JsonRpcNotification>,
-    notification_rx: Option<mpsc::Receiver<JsonRpcNotification>>, // Make this Option
+    notification_rx: Option<mpsc::Receiver<JsonRpcNotification>>,
     state: Arc<(watch::Sender<ServerState>, watch::Receiver<ServerState>)>,
     supported_versions: Vec<String>,
     client_capabilities: Arc<RwLock<Option<ClientCapabilities>>>,
@@ -127,6 +127,7 @@ where
             })),
             tool_manager: Arc::new(ToolManager::new(ToolCapabilities {
                 list_changed: config
+                    .clone()
                     .capabilities
                     .as_ref()
                     .is_some_and(|c| c.tools.as_ref().is_some_and(|t| t.list_changed)),
@@ -146,6 +147,26 @@ where
         }
     }
 
+    // Initialize the server with notification support
+    pub fn initialize(&mut self) {
+        // Create a new tool manager with notification support
+        if self
+            .config
+            .capabilities
+            .as_ref()
+            .is_some_and(|c| c.tools.as_ref().is_some_and(|t| t.list_changed))
+        {
+            let notification_tx = self.notification_tx.clone();
+            let tool_capabilities = ToolCapabilities { list_changed: true };
+
+            // Replace the tool manager with one that has notification support
+            self.tool_manager = Arc::new(ToolManager::with_notification_sender(
+                tool_capabilities,
+                notification_tx,
+            ));
+        }
+    }
+
     pub async fn process_request(
         &self,
         method: &str,
@@ -155,11 +176,13 @@ where
     }
 
     pub async fn run_stdio_transport(&mut self) -> Result<(), McpError> {
+        self.initialize();
         let transport = StdioTransport::new(Some(1024));
         self.run_transport(transport).await
     }
 
     pub async fn run_sse_transport(&mut self) -> Result<(), McpError> {
+        self.initialize();
         let transport = SseTransport::new_server(
             self.config.server.host.clone(),
             self.config.server.port,
@@ -169,6 +192,7 @@ where
     }
 
     pub async fn run_websocket_transport(&mut self) -> Result<(), McpError> {
+        self.initialize();
         let transport = WebSocketTransport::new_server(
             self.config.server.host.clone(),
             self.config.server.port,
@@ -180,7 +204,7 @@ where
     #[cfg(unix)]
     pub async fn run_unix_transport(&mut self) -> Result<(), McpError> {
         tracing::info!("Starting Unix transport");
-
+        self.initialize();
         let transport = crate::transport::unix::UnixTransport::new_server(
             PathBuf::from(&self.config.server.host),
             Some(1024),
