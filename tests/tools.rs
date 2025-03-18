@@ -66,6 +66,7 @@ impl ToolProvider for MockCalculatorTool {
                             text: "Division by zero".to_string(),
                         }],
                         is_error: true,
+                        _meta: None,
                     });
                 }
                 params.a / params.b
@@ -78,6 +79,7 @@ impl ToolProvider for MockCalculatorTool {
                 text: result.to_string(),
             }],
             is_error: false,
+            _meta: None,
         })
     }
 }

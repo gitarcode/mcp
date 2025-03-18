@@ -217,12 +217,14 @@ impl ToolProvider for CalculatorTool {
                     text: result.to_string(),
                 }],
                 is_error: false,
+                _meta: None,
             }),
             Err(error) => Ok(ToolResult {
                 content: vec![ToolContent::Text {
                     text: error.to_string(),
                 }],
                 is_error: true,
+                _meta: None,
             }),
         }
     }

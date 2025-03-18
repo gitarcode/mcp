@@ -105,6 +105,7 @@ impl ToolProvider for FileSystemTools {
             return Ok(ToolResult {
                 content: vec![ToolContent::Text { text: dirs }],
                 is_error: false,
+                _meta: None,
             });
         }
 
