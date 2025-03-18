@@ -74,6 +74,7 @@ impl ToolProvider for WriteFileTool {
                 text: format!("Successfully wrote {} bytes to {}", content.len(), path),
             }],
             is_error: false,
+            _meta: None,
         })
     }
 }

@@ -44,6 +44,7 @@ impl ToolProvider for TestTool {
         Ok(ToolResult {
             content: vec![],
             is_error: false,
+            _meta: None,
         })
     }
 }
@@ -99,6 +100,7 @@ impl ToolProvider for PingTool {
         Ok(ToolResult {
             content: vec![ToolContent::Text { text: body }],
             is_error: false,
+            _meta: None,
         })
     }
 }

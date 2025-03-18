@@ -70,6 +70,7 @@ impl ToolProvider for DirectoryTool {
                         text: format!("Created directory: {}", path),
                     }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             Some("list_directory") => {
@@ -96,6 +97,7 @@ impl ToolProvider for DirectoryTool {
                         text: listing.join("\n"),
                     }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             Some("move_file") => {
@@ -115,6 +117,7 @@ impl ToolProvider for DirectoryTool {
                         text: format!("Moved {} to {}", source, destination),
                     }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             _ => Err(McpError::InvalidParams),

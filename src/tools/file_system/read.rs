@@ -92,6 +92,7 @@ impl ToolProvider for ReadFileTool {
                 Ok(ToolResult {
                     content: vec![ToolContent::Text { text: content }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             Some("read_multiple_files") => {
@@ -119,6 +120,7 @@ impl ToolProvider for ReadFileTool {
                 Ok(ToolResult {
                     content: contents,
                     is_error: false,
+                    _meta: None,
                 })
             }
             _ => Err(McpError::InvalidParams),

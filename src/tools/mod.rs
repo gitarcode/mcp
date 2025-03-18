@@ -75,6 +75,11 @@ pub struct ResourceContent {
 pub struct ToolResult {
     pub content: Vec<ToolContent>,
     pub is_error: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(rename = "_meta")]
+    pub _meta: Option<HashMap<String, Value>>
 }
 
 // Request/Response types

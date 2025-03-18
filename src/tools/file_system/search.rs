@@ -131,6 +131,7 @@ impl ToolProvider for SearchTool {
                         },
                     }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             Some("get_file_info") => {
@@ -140,6 +141,7 @@ impl ToolProvider for SearchTool {
                 Ok(ToolResult {
                     content: vec![ToolContent::Text { text: info }],
                     is_error: false,
+                    _meta: None,
                 })
             }
             _ => Err(McpError::InvalidParams),
