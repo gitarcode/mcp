@@ -25,7 +25,7 @@ struct EndpointEvent {
 
 pub struct SseTransport {
     host: String,
-    port: u16,
+    port: Option<u16>,
     client_mode: bool,
     buffer_size: usize,
 }
@@ -34,7 +34,7 @@ impl SseTransport {
     pub fn new_server(host: String, port: u16, buffer_size: usize) -> Self {
         Self {
             host,
-            port,
+            port: Some(port),
             client_mode: false,
             buffer_size,
         }
@@ -43,7 +43,7 @@ impl SseTransport {
     pub fn new_client(host: String, port: u16, buffer_size: usize) -> Self {
         Self {
             host,
-            port,
+            port: Some(port),
             client_mode: true,
             buffer_size,
         }
@@ -251,27 +251,35 @@ impl SseTransport {
 #[async_trait]
 impl Transport for SseTransport {
     async fn start(&mut self) -> Result<TransportChannels, McpError> {
+        // Check if port is None, return error
+        if self.port.is_none() {
+            return Err(McpError::InternalError(
+                "SSE transport requires a port, but none was provided".to_string(),
+            ));
+        }
+        
         let (cmd_tx, cmd_rx) = mpsc::channel(self.buffer_size);
         let (event_tx, event_rx) = mpsc::channel(self.buffer_size);
 
         if self.client_mode {
             tokio::spawn(Self::run_client(
                 self.host.clone(),
-                self.port,
+                self.port.unwrap(), // Safe to unwrap since we checked it's not None
                 cmd_rx,
                 event_tx,
             ));
         } else {
             tokio::spawn(Self::run_server(
                 self.host.clone(),
-                self.port,
+                self.port.unwrap(), // Safe to unwrap since we checked it's not None
                 cmd_rx,
                 event_tx,
             ));
         }
 
-        let event_rx = Arc::new(tokio::sync::Mutex::new(event_rx));
-
-        Ok(TransportChannels { cmd_tx, event_rx })
+        Ok(TransportChannels {
+            cmd_tx,
+            event_rx: Arc::new(tokio::sync::Mutex::new(event_rx)),
+        })
     }
 }

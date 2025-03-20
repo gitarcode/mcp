@@ -59,7 +59,7 @@ async fn main() -> Result<(), McpError> {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 transport: TransportType::from(args.transport.as_deref().unwrap_or("stdio")),
                 host: "127.0.0.1".to_string(),
-                port: args.port,
+                port: Some(args.port),
                 max_connections: 100,
                 timeout_ms: 30000,
             },

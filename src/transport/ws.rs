@@ -25,7 +25,7 @@ use url;
 
 /// Capture config to server/connect
 enum WsTransportConfig {
-    Server { host: String, port: u16 },
+    Server { host: String, port: Option<u16> },
     Client { url: String },
 }
 
@@ -36,7 +36,7 @@ pub struct WebSocketTransport {
 }
 
 impl WebSocketTransport {
-    pub fn new_server(host: String, port: u16, buffer_size: usize) -> Self {
+    pub fn new_server(host: String, port: Option<u16>, buffer_size: usize) -> Self {
         Self {
             config: WsTransportConfig::Server { host, port },
             buffer_size,
@@ -44,20 +44,28 @@ impl WebSocketTransport {
         }
     }
 
-    pub fn new_client(host: String, port: u16, buffer_size: usize) -> Self {
+    pub fn new_client(host: String, port: Option<u16>, buffer_size: usize) -> Self {
         Self {
             config: WsTransportConfig::Client {
-                url: format!("ws://{}:{}/ws", host, port),
+                url: if let Some(port) = port {
+                    format!("ws://{}:{}/ws", host, port)
+                } else {
+                    format!("ws://{}/ws", host)
+                },
             },
             buffer_size,
             auth_header: None,
         }
     }
 
-    pub fn new_wss_client(host: String, port: u16, buffer_size: usize) -> Self {
+    pub fn new_wss_client(host: String, port: Option<u16>, buffer_size: usize) -> Self {
         Self {
             config: WsTransportConfig::Client {
-                url: format!("wss://{}:{}/ws", host, port),
+                url: if let Some(port) = port {
+                    format!("wss://{}:{}/ws", host, port)
+                } else {
+                    format!("wss://{}/ws", host)
+                },
             },
             buffer_size,
             auth_header: None,
@@ -79,7 +87,7 @@ impl WebSocketTransport {
 
     async fn run_server(
         host: String,
-        port: u16,
+        port: Option<u16>,
         mut cmd_rx: mpsc::Receiver<TransportCommand>,
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
@@ -291,10 +299,10 @@ impl WebSocketTransport {
             }
         };
 
-        tracing::info!("Starting WebSocket server at ws://{}:{}/ws", host, port);
+        tracing::info!("Starting WebSocket server at ws://{}:{}/ws", host, port.unwrap_or(80));
 
         // This will block until the server is shut down
-        warp::serve(ws_route).run((host_addr, port)).await;
+        warp::serve(ws_route).run((host_addr, port.unwrap_or(80))).await;
 
         // If we got here, the server has been shut down
         message_task.abort();
@@ -537,13 +545,21 @@ impl Transport for WebSocketTransport {
                 ));
             }
             WsTransportConfig::Server { host, port } => {
-                tokio::spawn(Self::run_server(host.clone(), *port, cmd_rx, event_tx));
+                // If port is None, return error since we need a port for the WebSocket server
+                if port.is_none() {
+                    return Err(McpError::InternalError(
+                        "WebSocket transport requires a port, but none was provided".to_string(),
+                    ));
+                }
+                
+                tokio::spawn(Self::run_server(host.clone(), port.clone(), cmd_rx, event_tx));
             }
         }
 
-        let event_rx = Arc::new(tokio::sync::Mutex::new(event_rx));
-
-        Ok(TransportChannels { cmd_tx, event_rx })
+        Ok(TransportChannels {
+            cmd_tx,
+            event_rx: Arc::new(tokio::sync::Mutex::new(event_rx)),
+        })
     }
 }
 
@@ -570,7 +586,7 @@ mod tests {
         // Start a WebSocket server on a unique port
         let host = "127.0.0.1".to_string();
         let port = PORT_COUNTER.fetch_add(1, AtomicOrdering::SeqCst); // Unique port to avoid conflicts
-        let mut transport = WebSocketTransport::new_server(host.clone(), port, 32);
+        let mut transport = WebSocketTransport::new_server(host.clone(), Some(port), 32);
         let ws_url = format!("ws://{}:{}/ws", host, port);
 
         // Start the transport

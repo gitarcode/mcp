@@ -142,7 +142,7 @@ async fn main() -> Result<(), McpError> {
             let host = url.host_str().unwrap_or("127.0.0.1").to_string();
             let port = url.port().unwrap_or(3000);
 
-            let mut transport = WebSocketTransport::new_client(host, port, 32);
+            let mut transport = WebSocketTransport::new_client(host, Some(port), 32);
 
             // Add auth header if provided
             if let Some(auth) = args.auth_header {
@@ -159,7 +159,7 @@ async fn main() -> Result<(), McpError> {
             let host = url.host_str().unwrap_or("127.0.0.1").to_string();
             let port = url.port().unwrap_or(3000);
 
-            let mut transport = WebSocketTransport::new_wss_client(host, port, 32);
+            let mut transport = WebSocketTransport::new_wss_client(host, Some(port), 32);
             if let Some(auth) = args.auth_header {
                 transport = transport.with_auth_header(auth);
             }

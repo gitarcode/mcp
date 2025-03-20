@@ -183,9 +183,16 @@ where
 
     pub async fn run_sse_transport(&mut self) -> Result<(), McpError> {
         self.initialize();
+        
+        // Check if port is None, if so, don't start the transport
+        if self.config.server.port.is_none() {
+            tracing::info!("SSE transport disabled (port is None)");
+            return Ok(());
+        }
+        
         let transport = SseTransport::new_server(
             self.config.server.host.clone(),
-            self.config.server.port,
+            self.config.server.port.unwrap(), // Safe to unwrap since we checked it's not None
             1024, // Buffer size
         );
         self.run_transport(transport).await
@@ -193,6 +200,13 @@ where
 
     pub async fn run_websocket_transport(&mut self) -> Result<(), McpError> {
         self.initialize();
+        
+        // Check if port is None, if so, don't start the transport
+        if self.config.server.port.is_none() {
+            tracing::info!("WebSocket transport disabled (port is None)");
+            return Ok(());
+        }
+        
         let transport = WebSocketTransport::new_server(
             self.config.server.host.clone(),
             self.config.server.port,
@@ -514,7 +528,7 @@ mod tests {
     async fn test_run_transport() {
         let mut config = ServerConfig::default();
         config.server.host = "localhost".to_string();
-        config.server.port = 8080;
+        config.server.port = Some(8080);
 
         // Create server instance
         let mut server = McpServer::new(config, MockHandler);
@@ -562,7 +576,7 @@ mod tests {
     async fn test_protocol_messages() {
         let mut config = ServerConfig::default();
         config.server.host = "localhost".to_string();
-        config.server.port = 8080;
+        config.server.port = Some(8080);
 
         let mut server = McpServer::new(config, MockHandler);
 

@@ -28,7 +28,7 @@ async fn setup_test_server(
             version: "0.1.0".to_string(),
             transport: TransportType::Stdio,
             host: "127.0.0.1".to_string(),
-            port: 0,
+            port: Some(0),
             max_connections: 10,
             timeout_ms: 1000,
         },

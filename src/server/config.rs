@@ -46,7 +46,7 @@ pub struct ServerSettings {
     pub version: String,
     pub transport: TransportType,
     pub host: String,
-    pub port: u16,
+    pub port: Option<u16>,
     pub max_connections: usize,
     pub timeout_ms: u64,
 }
@@ -173,7 +173,7 @@ impl Default for ServerConfig {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 transport: TransportType::Stdio,
                 host: "127.0.0.1".to_string(),
-                port: 3000,
+                port: None,
                 max_connections: 100,
                 timeout_ms: 30000,
             },
