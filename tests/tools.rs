@@ -6,7 +6,7 @@ use mcp_rs::{
     error::McpError,
     protocol::BasicRequestHandler,
     server::{config::ServerConfig, McpServer},
-    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
+    tools::{CallToolArgs, Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
 };
 
 // Mock tool provider for testing
@@ -51,9 +51,9 @@ impl ToolProvider for MockCalculatorTool {
         }
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
         let params: CalculatorParams =
-            serde_json::from_value(arguments).map_err(|_| McpError::InvalidParams)?;
+            serde_json::from_value(arguments.arguments).map_err(|_| McpError::InvalidParams)?;
 
         let result = match params.operation.as_str() {
             "add" => params.a + params.b,
@@ -129,6 +129,7 @@ async fn test_tool_execution() {
                 "a": 5,
                 "b": 3
             }),
+            Some("calculator-id-1234".to_string()),
         )
         .await
         .unwrap();
@@ -149,6 +150,7 @@ async fn test_tool_execution() {
                 "a": 1,
                 "b": 0
             }),
+            Some("calculator-id-2345".to_string()),
         )
         .await
         .unwrap();
@@ -170,7 +172,7 @@ async fn test_invalid_tool() {
     // Test calling non-existent tool
     let result = server
         .tool_manager
-        .call_tool("nonexistent", json!({}))
+        .call_tool("nonexistent", json!({}), None)
         .await;
 
     assert!(result.is_err());
@@ -203,6 +205,7 @@ async fn test_invalid_arguments() {
                 "a": 1,
                 "b": 2
             }),
+            Some("calculator-id-3456".to_string()),
         )
         .await;
 

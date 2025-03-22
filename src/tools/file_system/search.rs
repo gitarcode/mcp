@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
 
 use crate::{
     error::McpError,
-    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
+    tools::{CallToolArgs, Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
 };
 
 pub struct SearchTool;
@@ -111,7 +111,8 @@ impl ToolProvider for SearchTool {
         }
     }
 
-    async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError> {
+    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
+        let arguments = arguments.arguments;
         match arguments["operation"].as_str() {
             Some("search_files") => {
                 let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;

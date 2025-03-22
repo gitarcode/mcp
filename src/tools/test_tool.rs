@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::error::McpError;
 
-use super::{Tool, ToolContent, ToolProvider, ToolResult};
+use super::{CallToolArgs, Tool, ToolContent, ToolProvider, ToolResult};
 
 pub struct TestTool;
 
@@ -40,7 +40,7 @@ impl ToolProvider for TestTool {
         }
     }
 
-    async fn execute(&self, _arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(&self, _arguments: CallToolArgs) -> Result<ToolResult, McpError> {
         Ok(ToolResult {
             content: vec![],
             is_error: false,
@@ -85,8 +85,9 @@ impl ToolProvider for PingTool {
         }
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
         let server = arguments
+            .arguments
             .get("server")
             .and_then(|s| s.as_str())
             .unwrap_or("localhost");

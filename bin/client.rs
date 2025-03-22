@@ -69,6 +69,8 @@ enum Commands {
         name: String,
         #[arg(short, long)]
         args: String,
+        #[arg(short, long)]
+        tool_id: Option<String>,
     },
     /// Set log level
     SetLogLevel {
@@ -236,10 +238,10 @@ async fn main() -> Result<(), McpError> {
             println!("{}", json!(res));
         }
 
-        Commands::CallTool { name, args } => {
+        Commands::CallTool { name, args , tool_id} => {
             let arguments =
                 serde_json::from_str(&args).map_err(|e| McpError::InvalidRequest(e.to_string()))?;
-            let res = client.call_tool(name, arguments).await?;
+            let res = client.call_tool(name, arguments, tool_id).await?;
             println!("{}", json!(res));
         }
 

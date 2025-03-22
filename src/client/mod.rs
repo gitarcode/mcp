@@ -245,6 +245,7 @@ impl Client {
         &self,
         name: String,
         arguments: serde_json::Value,
+        tool_id: Option<String>,
     ) -> Result<ToolResult, McpError> {
         self.assert_initialized().await?;
         self.assert_capability("tools").await?;
@@ -252,7 +253,11 @@ impl Client {
         self.protocol
             .request(
                 "tools/call",
-                Some(CallToolRequest { name, arguments }),
+                Some(CallToolRequest {
+                    name,
+                    arguments,
+                    tool_id,
+                }),
                 None,
             )
             .await

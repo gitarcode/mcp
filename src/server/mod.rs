@@ -347,7 +347,7 @@ where
                         serde_json::from_value(req.params.unwrap_or_default())
                             .map_err(|_| McpError::InvalidParams)?;
                     let result = tool_manager
-                        .call_tool(&params.name, params.arguments)
+                        .call_tool(&params.name, params.arguments, params.tool_id)
                         .await?;
                     Ok(serde_json::to_value(result).unwrap())
                 })
