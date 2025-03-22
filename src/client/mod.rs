@@ -252,7 +252,11 @@ impl Client {
         self.protocol
             .request(
                 "tools/call",
-                Some(CallToolRequest { name, arguments }),
+                Some(CallToolRequest {
+                    name,
+                    arguments,
+                    _meta: None,
+                }),
                 None,
             )
             .await

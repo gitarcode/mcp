@@ -102,6 +102,11 @@ pub struct ListToolsResponse {
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(rename = "_meta")]
+    pub _meta: Option<HashMap<String, Value>>,
 }
 
 // Tool Provider trait
