@@ -103,11 +103,11 @@ pub struct ListToolsResponse {
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
-    #[serde(flatten)]
     pub metadata: Option<CallToolArgs>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TypedBuilder)]
+#[serde(rename_all = "camelCase")]
 pub struct CallToolArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default, setter(into))]
