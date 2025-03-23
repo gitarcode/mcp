@@ -103,6 +103,8 @@ pub struct ListToolsResponse {
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<CallToolArgs>,
 }
 
