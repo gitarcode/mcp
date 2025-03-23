@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 
 use mcp_rs::{
     error::McpError,
     protocol::BasicRequestHandler,
     server::{config::ServerConfig, McpServer},
-    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
+    tools::{CallToolArgs, Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
 };
 
 // Mock tool provider for testing
@@ -51,7 +51,11 @@ impl ToolProvider for MockCalculatorTool {
         }
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(
+        &self,
+        arguments: Value,
+        _metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         let params: CalculatorParams =
             serde_json::from_value(arguments).map_err(|_| McpError::InvalidParams)?;
 
@@ -129,6 +133,12 @@ async fn test_tool_execution() {
                 "a": 5,
                 "b": 3
             }),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await
         .unwrap();
@@ -149,6 +159,12 @@ async fn test_tool_execution() {
                 "a": 1,
                 "b": 0
             }),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await
         .unwrap();
@@ -170,7 +186,7 @@ async fn test_invalid_tool() {
     // Test calling non-existent tool
     let result = server
         .tool_manager
-        .call_tool("nonexistent", json!({}))
+        .call_tool("nonexistent", json!({}), None)
         .await;
 
     assert!(result.is_err());
@@ -203,6 +219,12 @@ async fn test_invalid_arguments() {
                 "a": 1,
                 "b": 2
             }),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await;
 

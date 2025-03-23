@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use test_tool::{PingTool, TestTool};
 use tokio::sync::{mpsc, RwLock};
+use typed_builder::TypedBuilder;
 
 pub mod calculator;
 pub mod file_system;
@@ -102,6 +103,20 @@ pub struct ListToolsResponse {
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<CallToolArgs>,
+}
+
+#[derive(Debug, Serialize, Deserialize, TypedBuilder)]
+#[serde(rename_all = "camelCase")]
+pub struct CallToolArgs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default, setter(into))]
+    pub tool_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default, setter(into))]
+    pub session_id: Option<String>,
 }
 
 // Tool Provider trait
@@ -111,7 +126,11 @@ pub trait ToolProvider: Send + Sync {
     async fn get_tool(&self) -> Tool;
 
     /// Execute tool
-    async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError>;
+    async fn execute(
+        &self,
+        arguments: Value,
+        metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError>;
 }
 
 // Tool Manager
@@ -264,12 +283,17 @@ impl ToolManager {
         })
     }
 
-    pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<ToolResult, McpError> {
+    pub async fn call_tool(
+        &self,
+        name: &str,
+        arguments: Value,
+        metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         let tools = self.tools.read().await;
         let provider = tools
             .get(name)
             .ok_or_else(|| McpError::InvalidRequest(format!("Unknown tool: {}", name)))?;
 
-        provider.execute(arguments).await
+        provider.execute(arguments, metadata).await
     }
 }

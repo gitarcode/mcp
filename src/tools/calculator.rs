@@ -7,7 +7,7 @@ use crate::{
     protocol::{RequestHandler, ServerCapabilities},
 };
 
-use super::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult};
+use super::{CallToolArgs, Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult};
 
 // Domain types
 #[derive(Debug, serde::Deserialize)]
@@ -205,7 +205,11 @@ impl ToolProvider for CalculatorTool {
         }
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult, McpError> {
+    async fn execute(
+        &self,
+        arguments: Value,
+        _metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         let params: CalculatorParams = serde_json::from_value(arguments).map_err(|e| {
             tracing::error!("Error parsing calculator arguments: {:?}", e);
             McpError::InvalidParams
@@ -301,6 +305,12 @@ mod tests {
                     "a": 2.0,
                     "b": 3.0
                 }),
+                Some(
+                    CallToolArgs::builder()
+                        .session_id(Some("session-1234".to_string()))
+                        .tool_id(Some("calculator-1234".to_string()))
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -319,6 +329,12 @@ mod tests {
                     "operation": "ln",
                     "a": 2.718281828459045
                 }),
+                Some(
+                    CallToolArgs::builder()
+                        .session_id(Some("session-5678".to_string()))
+                        .tool_id(Some("calculator-5678".to_string()))
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -350,6 +366,12 @@ mod tests {
                     "a": -1.0,
                     "b": 10.0
                 }),
+                Some(
+                    CallToolArgs::builder()
+                        .session_id(Some("session-9999".to_string()))
+                        .tool_id(Some("calculator-9999".to_string()))
+                        .build(),
+                ),
             )
             .await
             .unwrap();

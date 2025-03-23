@@ -6,7 +6,7 @@ use tokio::fs;
 
 use crate::{
     error::McpError,
-    tools::{Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
+    tools::{CallToolArgs, Tool, ToolContent, ToolInputSchema, ToolProvider, ToolResult},
 };
 
 pub struct SearchTool;
@@ -111,7 +111,11 @@ impl ToolProvider for SearchTool {
         }
     }
 
-    async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError> {
+    async fn execute(
+        &self,
+        arguments: Value,
+        _metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         match arguments["operation"].as_str() {
             Some("search_files") => {
                 let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;
