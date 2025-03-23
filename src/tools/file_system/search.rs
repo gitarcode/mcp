@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
@@ -111,8 +111,11 @@ impl ToolProvider for SearchTool {
         }
     }
 
-    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
-        let arguments = arguments.arguments;
+    async fn execute(
+        &self,
+        arguments: Value,
+        _metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         match arguments["operation"].as_str() {
             Some("search_files") => {
                 let path = arguments["path"].as_str().ok_or(McpError::InvalidParams)?;

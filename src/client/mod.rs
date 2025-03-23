@@ -9,7 +9,10 @@ use crate::{
         ListResourcesRequest, ListResourcesResponse, ReadResourceRequest, ReadResourceResponse,
         ResourceCapabilities,
     },
-    tools::{CallToolRequest, ListToolsRequest, ListToolsResponse, ToolCapabilities, ToolResult},
+    tools::{
+        CallToolArgs, CallToolRequest, ListToolsRequest, ListToolsResponse, ToolCapabilities,
+        ToolResult,
+    },
     transport::{Transport, TransportCommand},
 };
 use serde::{Deserialize, Serialize};
@@ -245,7 +248,7 @@ impl Client {
         &self,
         name: String,
         arguments: serde_json::Value,
-        tool_id: Option<String>,
+        metadata: Option<CallToolArgs>,
     ) -> Result<ToolResult, McpError> {
         self.assert_initialized().await?;
         self.assert_capability("tools").await?;
@@ -256,7 +259,7 @@ impl Client {
                 Some(CallToolRequest {
                     name,
                     arguments,
-                    tool_id,
+                    metadata,
                 }),
                 None,
             )

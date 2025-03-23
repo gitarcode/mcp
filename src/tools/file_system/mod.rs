@@ -8,6 +8,7 @@ use crate::{
     tools::{Tool, ToolContent, ToolProvider, ToolResult},
 };
 use async_trait::async_trait;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -93,10 +94,13 @@ impl ToolProvider for FileSystemTools {
         tools.remove(0)
     }
 
-    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
-        let args = &arguments.arguments;
+    async fn execute(
+        &self,
+        arguments: Value,
+        metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         // Add operation to list allowed directories
-        if args["operation"].as_str() == Some("list_allowed_directories") {
+        if arguments["operation"].as_str() == Some("list_allowed_directories") {
             let dirs = self
                 .allowed_directories
                 .iter()
@@ -112,15 +116,19 @@ impl ToolProvider for FileSystemTools {
         }
 
         // Route to appropriate sub-tool based on operation type
-        let operation = args["operation"].as_str().ok_or(McpError::InvalidParams)?;
+        let operation = arguments["operation"]
+            .as_str()
+            .ok_or(McpError::InvalidParams)?;
 
         match operation {
-            "read_file" | "read_multiple_files" => self.read_tool.execute(arguments).await,
-            "write_file" => self.write_tool.execute(arguments).await,
-            "create_directory" | "list_directory" | "move_file" => {
-                self.directory_tool.execute(arguments).await
+            "read_file" | "read_multiple_files" => {
+                self.read_tool.execute(arguments, metadata).await
             }
-            "search_files" | "get_file_info" => self.search_tool.execute(arguments).await,
+            "write_file" => self.write_tool.execute(arguments, metadata).await,
+            "create_directory" | "list_directory" | "move_file" => {
+                self.directory_tool.execute(arguments, metadata).await
+            }
+            "search_files" | "get_file_info" => self.search_tool.execute(arguments, metadata).await,
             _ => Err(McpError::InvalidParams),
         }
     }
@@ -148,14 +156,17 @@ mod tests {
         // Test write operation
         let write_result = fs_tools
             .execute(
-                CallToolArgs::builder()
-                    .arguments(json!({
-                        "operation": "write_file",
-                        "path": test_file.to_str().unwrap(),
-                        "content": test_content,
-                    }))
-                    .tool_id(Some("write-to-file-1234".to_string()))
-                    .build(),
+                json!({
+                    "operation": "write_file",
+                    "path": test_file.to_str().unwrap(),
+                    "content": test_content,
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("write-to-file-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -163,13 +174,17 @@ mod tests {
 
         // Test read operation
         let read_result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "read_file",
                     "path": test_file.to_str().unwrap(),
-                }))
-                .tool_id(Some("read-from-file-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("read-from-file-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -187,13 +202,17 @@ mod tests {
 
         // Test directory creation
         let create_result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "create_directory",
                     "path": test_dir.to_str().unwrap(),
-                }))
-                .tool_id(Some("create-directory-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("create-directory-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -201,13 +220,17 @@ mod tests {
 
         // Test directory listing
         let list_result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "list_directory",
                     "path": temp_dir.path().to_str().unwrap(),
-                }))
-                .tool_id(Some("list-directory-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("list-directory-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -227,29 +250,37 @@ mod tests {
         for file in &test_files {
             let path = temp_dir.path().join(file);
             fs_tools
-                .execute(CallToolArgs::builder()
-                    .arguments(json!({
+                .execute(
+                    json!({
                         "operation": "write_file",
                         "path": path.to_str().unwrap(),
                         "content": "test content",
-                    }))
-                    .tool_id(Some("write-to-file-1234".to_string()))
-                    .build(),
-            )
-            .await
-            .unwrap();
+                    }),
+                    Some(
+                        CallToolArgs::builder()
+                            .tool_id("write-to-file-1234".to_string())
+                            .session_id("session-1234".to_string())
+                            .build(),
+                    ),
+                )
+                .await
+                .unwrap();
         }
 
         // Test search
         let search_result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "search_files",
                     "path": temp_dir.path().to_str().unwrap(),
                     "pattern": "test",
-                }))
-                .tool_id(Some("search-files-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("search-files-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -272,28 +303,36 @@ mod tests {
 
         // Create source file
         fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "write_file",
                     "path": source.to_str().unwrap(),
                     "content": "test content",
-                }))
-                .tool_id(Some("write-to-file-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("write-to-file-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
 
         // Test move operation
         let move_result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "move_file",
                     "source": source.to_str().unwrap(),
                     "destination": dest.to_str().unwrap(),
-                }))
-                .tool_id(Some("move-file-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("move-file-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await
             .unwrap();
@@ -311,14 +350,18 @@ mod tests {
 
         // Test invalid path
         let result = fs_tools
-            .execute(CallToolArgs::builder()
-                .arguments(json!({
+            .execute(
+                json!({
                     "operation": "write_file",
                     "path": invalid_path,
                     "content": "test content",
-                }))
-                .tool_id(Some("write-to-file-1234".to_string()))
-                .build(),
+                }),
+                Some(
+                    CallToolArgs::builder()
+                        .tool_id("write-to-file-1234".to_string())
+                        .session_id("session-1234".to_string())
+                        .build(),
+                ),
             )
             .await;
 
@@ -334,24 +377,33 @@ mod tests {
         for (i, file) in files.iter().enumerate() {
             let path = temp_dir.path().join(file);
             fs_tools
-                .execute(CallToolArgs::builder()
-                    .arguments(json!({
+                .execute(
+                    json!({
                         "operation": "write_file",
                         "path": path.to_str().unwrap(),
                         "content": format!("content {}", i),
-                    })).build())
+                    }),
+                    Some(
+                        CallToolArgs::builder()
+                            .tool_id(format!("write-to-file-{}", i).to_string())
+                            .session_id("session-1234".to_string())
+                            .build(),
+                    ),
+                )
                 .await
                 .unwrap();
         }
 
         // Test reading multiple files
-        let read_result = fs_tools.execute(CallToolArgs::builder()
-            .arguments(json!({
+        let read_result = fs_tools.execute(
+            json!({
                 "operation": "read_multiple_files",
                 "paths": files.iter().map(|f| temp_dir.path().join(f).to_str().unwrap().to_string()).collect::<Vec<_>>(),
-            }))
-            .tool_id(Some("read-multiple-files-1234".to_string()))
-            .build(),
+            }),
+            Some(CallToolArgs::builder()
+            .tool_id("read-multiple-files-1234".to_string())
+            .session_id("session-1234".to_string())
+            .build()),
         )
         .await
         .unwrap();

@@ -103,15 +103,18 @@ pub struct ListToolsResponse {
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Value,
-    pub tool_id: Option<String>,
+    #[serde(flatten)]
+    pub metadata: Option<CallToolArgs>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TypedBuilder)]
 pub struct CallToolArgs {
-    pub arguments: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default, setter(into))]
     pub tool_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default, setter(into))]
+    pub session_id: Option<String>,
 }
 
 // Tool Provider trait
@@ -121,7 +124,11 @@ pub trait ToolProvider: Send + Sync {
     async fn get_tool(&self) -> Tool;
 
     /// Execute tool
-    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError>;
+    async fn execute(
+        &self,
+        arguments: Value,
+        metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError>;
 }
 
 // Tool Manager
@@ -278,20 +285,13 @@ impl ToolManager {
         &self,
         name: &str,
         arguments: Value,
-        tool_id: Option<String>,
+        metadata: Option<CallToolArgs>,
     ) -> Result<ToolResult, McpError> {
         let tools = self.tools.read().await;
         let provider = tools
             .get(name)
             .ok_or_else(|| McpError::InvalidRequest(format!("Unknown tool: {}", name)))?;
 
-        provider
-            .execute(
-                CallToolArgs::builder()
-                    .arguments(arguments)
-                    .tool_id(tool_id)
-                    .build(),
-            )
-            .await
+        provider.execute(arguments, metadata).await
     }
 }

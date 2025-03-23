@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 
 use mcp_rs::{
@@ -51,9 +51,13 @@ impl ToolProvider for MockCalculatorTool {
         }
     }
 
-    async fn execute(&self, arguments: CallToolArgs) -> Result<ToolResult, McpError> {
+    async fn execute(
+        &self,
+        arguments: Value,
+        _metadata: Option<CallToolArgs>,
+    ) -> Result<ToolResult, McpError> {
         let params: CalculatorParams =
-            serde_json::from_value(arguments.arguments).map_err(|_| McpError::InvalidParams)?;
+            serde_json::from_value(arguments).map_err(|_| McpError::InvalidParams)?;
 
         let result = match params.operation.as_str() {
             "add" => params.a + params.b,
@@ -129,7 +133,12 @@ async fn test_tool_execution() {
                 "a": 5,
                 "b": 3
             }),
-            Some("calculator-id-1234".to_string()),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await
         .unwrap();
@@ -150,7 +159,12 @@ async fn test_tool_execution() {
                 "a": 1,
                 "b": 0
             }),
-            Some("calculator-id-2345".to_string()),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await
         .unwrap();
@@ -205,7 +219,12 @@ async fn test_invalid_arguments() {
                 "a": 1,
                 "b": 2
             }),
-            Some("calculator-id-3456".to_string()),
+            Some(
+                CallToolArgs::builder()
+                    .session_id("calculator-id-1234".to_string())
+                    .tool_id("calculator-tool-id-1234".to_string())
+                    .build(),
+            ),
         )
         .await;
 

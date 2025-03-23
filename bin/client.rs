@@ -2,9 +2,8 @@ use clap::{Parser, Subcommand};
 use mcp_rs::{
     client::{Client, ClientInfo},
     error::McpError,
-    transport::sse::SseTransport,
-    transport::stdio::StdioTransport,
-    transport::ws::WebSocketTransport,
+    tools::CallToolArgs,
+    transport::{sse::SseTransport, stdio::StdioTransport, ws::WebSocketTransport},
 };
 use serde_json::json;
 
@@ -71,6 +70,8 @@ enum Commands {
         args: String,
         #[arg(short, long)]
         tool_id: Option<String>,
+        #[arg(short, long)]
+        session_id: Option<String>,
     },
     /// Set log level
     SetLogLevel {
@@ -238,10 +239,26 @@ async fn main() -> Result<(), McpError> {
             println!("{}", json!(res));
         }
 
-        Commands::CallTool { name, args , tool_id} => {
+        Commands::CallTool {
+            name,
+            args,
+            tool_id,
+            session_id,
+        } => {
             let arguments =
                 serde_json::from_str(&args).map_err(|e| McpError::InvalidRequest(e.to_string()))?;
-            let res = client.call_tool(name, arguments, tool_id).await?;
+            let res = client
+                .call_tool(
+                    name,
+                    arguments,
+                    Some(
+                        CallToolArgs::builder()
+                            .session_id(session_id)
+                            .tool_id(tool_id)
+                            .build(),
+                    ),
+                )
+                .await?;
             println!("{}", json!(res));
         }
 
