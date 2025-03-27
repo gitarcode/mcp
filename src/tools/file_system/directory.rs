@@ -51,8 +51,8 @@ impl ToolProvider for DirectoryTool {
             description: "Directory operations including create, list, and move files.".to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
-                properties: schema_properties,
-                required: vec!["operation".to_string()],
+                properties: Some(schema_properties),
+                required: Some(vec!["operation".to_string()]),
             },
         }
     }

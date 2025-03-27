@@ -199,8 +199,8 @@ impl ToolProvider for CalculatorTool {
             description: "Advanced calculator supporting arithmetic, scientific, and trigonometric operations".to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
-                properties: schema_properties,
-                required: vec!["operation".to_string(), "a".to_string()],
+                properties: Some(schema_properties),
+                required: Some(vec!["operation".to_string(), "a".to_string()]),
             },
         }
     }

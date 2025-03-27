@@ -77,8 +77,8 @@ impl ToolProvider for ReadFileTool {
                 .to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
-                properties: schema_properties,
-                required: vec!["operation".to_string()],
+                properties: Some(schema_properties),
+                required: Some(vec!["operation".to_string()]),
             },
         }
     }

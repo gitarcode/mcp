@@ -48,12 +48,12 @@ impl ToolProvider for WriteFileTool {
                 .to_string(),
             input_schema: ToolInputSchema {
                 schema_type: "object".to_string(),
-                properties: schema_properties,
-                required: vec![
+                properties: Some(schema_properties),
+                required: Some(vec![
                     "operation".to_string(),
                     "path".to_string(),
                     "content".to_string(),
-                ],
+                ]),
             },
         }
     }

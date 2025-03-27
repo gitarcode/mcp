@@ -47,8 +47,8 @@ pub struct Tool {
 pub struct ToolInputSchema {
     #[serde(rename = "type")]
     pub schema_type: String,
-    pub properties: HashMap<String, Value>,
-    pub required: Vec<String>,
+    pub properties: Option<HashMap<String, Value>>,
+    pub required: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
