@@ -81,13 +81,13 @@ impl FileSystemTools {
 
 #[async_trait]
 impl ToolProvider for FileSystemTools {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         // Return composite tool definition containing all file system operations
         let mut tools = vec![
-            self.read_tool.get_tool().await,
-            self.write_tool.get_tool().await,
-            self.directory_tool.get_tool().await,
-            self.search_tool.get_tool().await,
+            self.read_tool.get_tool(),
+            self.write_tool.get_tool(),
+            self.directory_tool.get_tool(),
+            self.search_tool.get_tool(),
         ];
 
         // Return the first tool as the main tool definition

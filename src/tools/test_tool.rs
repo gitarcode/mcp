@@ -21,7 +21,7 @@ impl TestTool {
 
 #[async_trait]
 impl ToolProvider for TestTool {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         Tool {
             name: "test_tool".to_string(),
             description: "Test Tool".to_string(),
@@ -70,7 +70,7 @@ impl PingTool {
 
 #[async_trait]
 impl ToolProvider for PingTool {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         Tool {
             name: "ping_tool".to_string(),
             description: "Ping Tool".to_string(),

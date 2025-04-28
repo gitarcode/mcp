@@ -163,7 +163,7 @@ impl CalculatorTool {
 
 #[async_trait]
 impl ToolProvider for CalculatorTool {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         let mut schema_properties = HashMap::new();
         schema_properties.insert(
             "operation".to_string(),
