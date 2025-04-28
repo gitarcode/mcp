@@ -14,7 +14,7 @@ struct MockCalculatorTool;
 
 #[async_trait]
 impl ToolProvider for MockCalculatorTool {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         let mut properties = HashMap::new();
         properties.insert(
             "operation".to_string(),

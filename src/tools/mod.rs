@@ -123,7 +123,7 @@ pub struct CallToolArgs {
 #[async_trait]
 pub trait ToolProvider: Send + Sync {
     /// Get tool definition
-    async fn get_tool(&self) -> Tool;
+    fn get_tool(&self) -> Tool;
 
     /// Execute tool
     async fn execute(
@@ -183,7 +183,7 @@ impl ToolManager {
     }
 
     pub async fn register_tool(&self, provider: Arc<dyn ToolProvider>) {
-        let tool = provider.get_tool().await;
+        let tool = provider.get_tool();
         let mut tools = self.tools.write().await;
         tools.insert(tool.name.clone(), provider);
 
@@ -220,7 +220,7 @@ impl ToolManager {
     }
 
     pub async fn update_tool(&self, provider: Arc<dyn ToolProvider>) -> Result<(), McpError> {
-        let tool = provider.get_tool().await;
+        let tool = provider.get_tool();
         let mut tools = self.tools.write().await;
 
         if tools.contains_key(&tool.name) {
@@ -274,7 +274,7 @@ impl ToolManager {
         let mut tool_list = Vec::new();
 
         for provider in tools.values() {
-            tool_list.push(provider.get_tool().await);
+            tool_list.push(provider.get_tool());
         }
 
         Ok(ListToolsResponse {

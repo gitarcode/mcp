@@ -43,7 +43,7 @@ impl ReadFileTool {
 
 #[async_trait]
 impl ToolProvider for ReadFileTool {
-    async fn get_tool(&self) -> Tool {
+    fn get_tool(&self) -> Tool {
         let mut schema_properties = HashMap::new();
         schema_properties.insert(
             "operation".to_string(),

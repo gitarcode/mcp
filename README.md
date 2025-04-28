@@ -318,7 +318,7 @@ use serde_json::Value;
 #[async_trait]
 pub trait ToolProvider: Send + Sync {
     // Return tool definition
-    async fn get_tool(&self) -> Tool;
+    fn get_tool(&self) -> Tool;
     
     // Execute tool with given arguments
     async fn execute(&self, arguments: Value) -> Result<ToolResult, McpError>;
