@@ -5,6 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use test_tool::{PingTool, TestTool};
 use tokio::sync::{mpsc, RwLock};
 use typed_builder::TypedBuilder;
+use uuid::Uuid;
 
 pub mod calculator;
 pub mod file_system;
@@ -117,6 +118,8 @@ pub struct CallToolArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default, setter(into))]
     pub session_id: Option<String>,
+
+    pub agent_id: Uuid,
 }
 
 // Tool Provider trait
