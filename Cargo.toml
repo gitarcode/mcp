@@ -21,7 +21,7 @@ jsonrpc-core = "18"
 warp = "0.3"
 jsonrpc-derive = "18"
 futures = "0.3"
-uuid = { version = "1", features = ["v4", "v7", "serde"] }
+uuid = { version = "1", features = ["v4"] }
 url = "2"
 base64 = "0.22"
 async-stream = "0.3"

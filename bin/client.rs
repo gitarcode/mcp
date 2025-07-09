@@ -6,7 +6,6 @@ use mcp_rs::{
     transport::{sse::SseTransport, stdio::StdioTransport, ws::WebSocketTransport},
 };
 use serde_json::json;
-use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 #[command(name = "mcp-client", version, about = "MCP Client CLI")]
@@ -256,7 +255,6 @@ async fn main() -> Result<(), McpError> {
                         CallToolArgs::builder()
                             .session_id(session_id)
                             .tool_id(tool_id)
-                            .agent_id(Uuid::new_v4())
                             .build(),
                     ),
                 )
