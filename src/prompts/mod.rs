@@ -127,7 +127,7 @@ impl PromptManager {
         let prompts = self.prompts.read().await;
         let prompt = prompts
             .get(name)
-            .ok_or_else(|| McpError::InvalidRequest(format!("Unknown prompt: {}", name)))?;
+            .ok_or_else(|| McpError::InvalidRequest(format!("Unknown prompt: {name}")))?;
 
         // Validate required arguments
         if let Some(args) = &arguments {
@@ -174,7 +174,7 @@ impl PromptManager {
                 .tx
                 .send(notification)
                 .await
-                .map_err(|e| McpError::InternalError(format!("Notification error: {}", e)))?;
+                .map_err(|e| McpError::InternalError(format!("Notification error: {e}")))?;
         }
         Ok(())
     }

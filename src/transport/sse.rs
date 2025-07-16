@@ -167,7 +167,7 @@ impl SseTransport {
         event_tx: mpsc::Sender<TransportEvent>,
     ) {
         let client = reqwest::Client::new();
-        let sse_url = format!("http://{}:{}/sse", host, port);
+        let sse_url = format!("http://{host}:{port}/sse");
 
         tracing::debug!("Connecting to SSE endpoint: {}", sse_url);
 

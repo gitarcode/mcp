@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
+use uuid::Uuid;
 
 use mcp_rs::{
     error::McpError,
@@ -137,6 +138,7 @@ async fn test_tool_execution() {
                 CallToolArgs::builder()
                     .session_id("calculator-id-1234".to_string())
                     .tool_id("calculator-tool-id-1234".to_string())
+                    .agent_id(Uuid::new_v4())
                     .build(),
             ),
         )
@@ -163,6 +165,7 @@ async fn test_tool_execution() {
                 CallToolArgs::builder()
                     .session_id("calculator-id-1234".to_string())
                     .tool_id("calculator-tool-id-1234".to_string())
+                    .agent_id(Uuid::new_v4())
                     .build(),
             ),
         )
@@ -223,6 +226,7 @@ async fn test_invalid_arguments() {
                 CallToolArgs::builder()
                     .session_id("calculator-id-1234".to_string())
                     .tool_id("calculator-tool-id-1234".to_string())
+                    .agent_id(Uuid::new_v4())
                     .build(),
             ),
         )

@@ -47,7 +47,7 @@ impl WebSocketTransport {
     pub fn new_client(host: String, port: u16, buffer_size: usize) -> Self {
         Self {
             config: WsTransportConfig::Client {
-                url: format!("ws://{}:{}/ws", host, port),
+                url: format!("ws://{host}:{port}/ws"),
             },
             buffer_size,
             auth_header: None,
@@ -57,7 +57,7 @@ impl WebSocketTransport {
     pub fn new_wss_client(host: String, port: u16, buffer_size: usize) -> Self {
         Self {
             config: WsTransportConfig::Client {
-                url: format!("wss://{}:{}/ws", host, port),
+                url: format!("wss://{host}:{port}/ws"),
             },
             buffer_size,
             auth_header: None,

@@ -99,7 +99,7 @@ impl ToolProvider for PingTool {
             .get("server")
             .and_then(|s| s.as_str())
             .unwrap_or("localhost");
-        let res = reqwest::get(format!("http://{}", server))
+        let res = reqwest::get(format!("http://{server}"))
             .await
             .map_err(|e| McpError::ToolExecutionError(e.to_string()))?;
         let body = res

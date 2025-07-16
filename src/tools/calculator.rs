@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
+use uuid::Uuid;
 
 use crate::{
     error::McpError,
@@ -309,6 +310,7 @@ mod tests {
                     CallToolArgs::builder()
                         .session_id(Some("session-1234".to_string()))
                         .tool_id(Some("calculator-1234".to_string()))
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -327,12 +329,13 @@ mod tests {
                 "calculator",
                 json!({
                     "operation": "ln",
-                    "a": 2.718281828459045
+                    "a": std::f64::consts::E
                 }),
                 Some(
                     CallToolArgs::builder()
                         .session_id(Some("session-5678".to_string()))
                         .tool_id(Some("calculator-5678".to_string()))
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -370,6 +373,7 @@ mod tests {
                     CallToolArgs::builder()
                         .session_id(Some("session-9999".to_string()))
                         .tool_id(Some("calculator-9999".to_string()))
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )

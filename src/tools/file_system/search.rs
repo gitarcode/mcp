@@ -70,8 +70,7 @@ impl SearchTool {
             .as_secs();
 
         Ok(format!(
-            "Type: {}\nSize: {} bytes\nLast Modified: {} seconds since epoch",
-            file_type, size, modified
+            "Type: {file_type}\nSize: {size} bytes\nLast Modified: {modified} seconds since epoch"
         ))
     }
 }

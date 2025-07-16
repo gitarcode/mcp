@@ -77,7 +77,7 @@ impl fmt::Display for McpError {
             McpError::Custom { code, message } => write!(f, "Error {}: {}", code, message),
             McpError::ConnectionFailed => write!(f, "Connection failed"),
             McpError::ConnectionTimeout => write!(f, "Connection timed out"),
-            McpError::ServerError(msg) => write!(f, "Server error: {}", msg),
+            McpError::ServerError(msg) => write!(f, "Server error: {msg}"),
         }
     }
 }

@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use super::CallToolArgs;
 
@@ -165,6 +166,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("write-to-file-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -183,6 +185,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("read-from-file-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -211,6 +214,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("create-directory-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -229,6 +233,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("list-directory-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -260,6 +265,7 @@ mod tests {
                         CallToolArgs::builder()
                             .tool_id("write-to-file-1234".to_string())
                             .session_id("session-1234".to_string())
+                            .agent_id(Uuid::new_v4())
                             .build(),
                     ),
                 )
@@ -279,6 +285,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("search-files-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -313,6 +320,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("write-to-file-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -331,6 +339,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("move-file-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -360,6 +369,7 @@ mod tests {
                     CallToolArgs::builder()
                         .tool_id("write-to-file-1234".to_string())
                         .session_id("session-1234".to_string())
+                        .agent_id(Uuid::new_v4())
                         .build(),
                 ),
             )
@@ -381,12 +391,13 @@ mod tests {
                     json!({
                         "operation": "write_file",
                         "path": path.to_str().unwrap(),
-                        "content": format!("content {}", i),
+                        "content": format!("content {i}"),
                     }),
                     Some(
                         CallToolArgs::builder()
-                            .tool_id(format!("write-to-file-{}", i).to_string())
+                            .tool_id(format!("write-to-file-{i}").to_string())
                             .session_id("session-1234".to_string())
+                            .agent_id(Uuid::new_v4())
                             .build(),
                     ),
                 )
@@ -403,6 +414,7 @@ mod tests {
             Some(CallToolArgs::builder()
             .tool_id("read-multiple-files-1234".to_string())
             .session_id("session-1234".to_string())
+            .agent_id(Uuid::new_v4())
             .build()),
         )
         .await

@@ -113,10 +113,10 @@ impl ToolProvider for ReadFileTool {
                 for (path, result) in results {
                     match result {
                         Ok(content) => contents.push(ToolContent::Text {
-                            text: format!("File: {}\n{}", path, content),
+                            text: format!("File: {path}\n{content}"),
                         }),
                         Err(e) => contents.push(ToolContent::Text {
-                            text: format!("Error reading {}: {}", path, e),
+                            text: format!("Error reading {path}: {e}"),
                         }),
                     }
                 }

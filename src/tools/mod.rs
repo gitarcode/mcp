@@ -209,15 +209,14 @@ impl ToolManager {
                 self.send_tool_update_notification(
                     name,
                     ToolUpdateType::Removed,
-                    Some(format!("Tool '{}' unregistered", name)),
+                    Some(format!("Tool '{name}' unregistered")),
                 )
                 .await;
             }
             Ok(())
         } else {
             Err(McpError::InvalidRequest(format!(
-                "Tool '{}' not found",
-                name
+                "Tool '{name}' not found"
             )))
         }
     }
@@ -295,7 +294,7 @@ impl ToolManager {
         let tools = self.tools.read().await;
         let provider = tools
             .get(name)
-            .ok_or_else(|| McpError::InvalidRequest(format!("Unknown tool: {}", name)))?;
+            .ok_or_else(|| McpError::InvalidRequest(format!("Unknown tool: {name}")))?;
 
         provider.execute(arguments, metadata).await
     }

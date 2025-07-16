@@ -71,7 +71,7 @@ impl ToolProvider for DirectoryTool {
 
                 Ok(ToolResult {
                     content: vec![ToolContent::Text {
-                        text: format!("Created directory: {}", path),
+                        text: format!("Created directory: {path}"),
                     }],
                     is_error: false,
                     _meta: None,
@@ -118,7 +118,7 @@ impl ToolProvider for DirectoryTool {
 
                 Ok(ToolResult {
                     content: vec![ToolContent::Text {
-                        text: format!("Moved {} to {}", source, destination),
+                        text: format!("Moved {source} to {destination}"),
                     }],
                     is_error: false,
                     _meta: None,

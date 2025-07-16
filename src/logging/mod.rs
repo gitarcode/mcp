@@ -195,7 +195,7 @@ struct JsonVisitor(serde_json::Value);
 
 impl tracing::field::Visit for JsonVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        let value = format!("{:?}", value);
+        let value = format!("{value:?}");
         if let serde_json::Value::Object(ref mut map) = self.0 {
             map.insert(field.name().to_string(), serde_json::Value::String(value));
         } else {
