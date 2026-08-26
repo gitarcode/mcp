@@ -28,7 +28,9 @@ async-stream = "0.3"
 mime_guess = "2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 config = "0.15"
-clap = { version = "4", features = ["derive"] }
+# Optional: the two binaries below are the only clap users, and a library consumer that
+# never builds them was compiling clap plus its 12-crate subtree for nothing.
+clap = { version = "4", features = ["derive"], optional = true }
 reqwest = { version = "0.12", features = ["json"] }
 reqwest-eventsource = "0.6"
 mime = "0.3"
@@ -38,13 +40,21 @@ tracing-core = "0.1"
 async-recursion = "1"
 http = "1.1"
 
+# Off by default so `mcp_rs` as a dependency carries no CLI parser. `required-features`
+# makes cargo skip the binaries rather than fail when it is off, so `cargo build` on a
+# checkout still succeeds and `--all-features` (what CI runs) still builds and lints them.
+[features]
+cli = ["dep:clap"]
+
 [[bin]]
 name = "server"
 path = "bin/server.rs"
+required-features = ["cli"]
 
 [[bin]]
 name = "client"
 path = "bin/client.rs"
+required-features = ["cli"]
 
 [lib]
 name = "mcp_rs"
